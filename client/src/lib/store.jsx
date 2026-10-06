@@ -32,10 +32,18 @@ export function AppProvider({ children }) {
   }, []);
   useEffect(() => { if (user) loadRefs().catch(() => {}); }, [user, loadRefs]);
 
+  // Таймер на ту же задачу/проект/заявку не перезапускаем — только сообщаем, что он уже идёт
   const startTimer = useCallback(async (payload) => {
-    const t = await api.post('/time/start', payload);
-    setTimer(t); toast('Таймер запущен'); setVersion((v) => v + 1);
-  }, [toast]);
+    if (timer && (payload.task_id ? timer.task_id === payload.task_id
+      : payload.ticket_id ? timer.ticket_id === payload.ticket_id
+      : payload.project_id && !timer.task_id && !timer.ticket_id && timer.project_id === payload.project_id)) {
+      toast('Таймер уже идёт'); return;
+    }
+    try {
+      const t = await api.post('/time/start', payload);
+      setTimer(t); toast(timer ? 'Предыдущий таймер остановлен, новый запущен' : 'Таймер запущен'); setVersion((v) => v + 1);
+    } catch (e) { toast(e.message, 'error'); }
+  }, [toast, timer]);
   const stopTimer = useCallback(async () => {
     await api.post('/time/stop');
     setTimer(null); toast('Время записано'); bump();

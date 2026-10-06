@@ -253,22 +253,57 @@ api.delete('/projects/:id', requireRole('admin', 'manager'), wrap((req) => {
 
 /* ---------- tasks ---------- */
 const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'position'];
-const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name, cb.name creator_name,
+const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name, cb.name creator_name, cb.color creator_color,
     (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.task_id = t.id) tracked_sec,
     (SELECT COUNT(*) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') comments_count,
-    (SELECT MAX(id) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') last_comment_id
+    (SELECT MAX(id) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') last_comment_id,
+    (SELECT COUNT(*) FROM files f WHERE f.task_id = t.id) files_count,
+    (SELECT GROUP_CONCAT(user_id) FROM task_members m WHERE m.task_id = t.id AND m.role = 'coassignee') coassignee_ids,
+    (SELECT GROUP_CONCAT(user_id) FROM task_members m WHERE m.task_id = t.id AND m.role = 'observer') observer_ids
   FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id JOIN projects p ON p.id = t.project_id
   LEFT JOIN users cb ON cb.id = t.created_by`;
+
+const ids = (v) => (v ? String(v).split(',').map(Number) : []);
+const shapeTask = (t) => t && ({ ...t, coassignee_ids: ids(t.coassignee_ids), observer_ids: ids(t.observer_ids) });
+const getTask = (id) => shapeTask(get(`${TASK_SELECT} WHERE t.id = ?`, id));
+
+// Права на задачу:
+//  edit   — менять поля (название, описание, сроки, людей) и удалять: администратор или постановщик
+//           (у старых задач без постановщика — администратор и менеджер). Закрытую задачу менять нельзя.
+//  status — начать / завершить / возобновить: те, кто может edit, + исполнитель и соисполнители
+function taskPerms(user, t) {
+  const admin = user.role === 'admin';
+  const owner = t.created_by ? t.created_by === user.id : user.role === 'manager';
+  const doer = t.assignee_id === user.id || (t.coassignee_ids || []).includes(user.id);
+  return { edit: admin || owner, status: admin || owner || doer };
+}
+
+const userName = (uid) => get('SELECT name FROM users WHERE id = ?', uid)?.name || 'сотрудник';
+// Синхронизация соисполнителей/наблюдателей + системные сообщения в чат
+function setTaskMembers(taskId, role, list, actorId) {
+  if (!Array.isArray(list)) return;
+  const next = new Set(list.map(Number).filter(Boolean));
+  const cur = new Set(all('SELECT user_id FROM task_members WHERE task_id = ? AND role = ?', taskId, role).map((r) => r.user_id));
+  const label = role === 'observer' ? 'наблюдателя' : 'соисполнителя';
+  for (const uid of next) if (!cur.has(uid)) {
+    run('INSERT OR IGNORE INTO task_members (task_id, user_id, role) VALUES (?,?,?)', taskId, uid, role);
+    systemComment(taskId, actorId, `добавил ${label}: ${userName(uid)}`);
+  }
+  for (const uid of cur) if (!next.has(uid)) {
+    run('DELETE FROM task_members WHERE task_id = ? AND user_id = ? AND role = ?', taskId, uid, role);
+    systemComment(taskId, actorId, `убрал ${label}: ${userName(uid)}`);
+  }
+}
 
 api.get('/tasks', wrap((req) => {
   const where = []; const params = [];
   if (req.query.project_id) { where.push('t.project_id = ?'); params.push(Number(req.query.project_id)); }
   if (req.query.assignee_id) { where.push('t.assignee_id = ?'); params.push(Number(req.query.assignee_id)); }
   if (req.query.open) where.push("t.status != 'done'");
-  return all(`${TASK_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY t.status = 'done', t.due_date IS NULL, t.due_date, t.id DESC`, ...params);
+  return all(`${TASK_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY t.status = 'done', t.due_date IS NULL, t.due_date, t.id DESC`, ...params).map(shapeTask);
 }));
 api.get('/tasks/:id', wrap((req) => {
-  const t = get(`${TASK_SELECT} WHERE t.id = ?`, idParam(req));
+  const t = getTask(idParam(req));
   if (!t) throw notFound();
   return t;
 }));
@@ -277,34 +312,61 @@ api.post('/tasks', wrap((req) => {
   required(data, 'project_id', 'title');
   data.created_by = req.user.id;
   if (data.status === 'done') data.completed_at = nowIso();
-  const id = insert('tasks', data);
+  const id = tx(() => {
+    const id = insert('tasks', data);
+    systemComment(id, req.user.id, 'создал задачу');
+    setTaskMembers(id, 'coassignee', req.body.coassignee_ids, req.user.id);
+    setTaskMembers(id, 'observer', req.body.observer_ids, req.user.id);
+    return id;
+  });
   const pname = get('SELECT name FROM projects WHERE id = ?', data.project_id)?.name;
   logActivity(req.user.id, 'task', id, 'create', `добавил задачу «${data.title}»${pname ? ` в ${pname}` : ''}`);
-  return get(`${TASK_SELECT} WHERE t.id = ?`, id);
+  return getTask(id);
 }));
 api.put('/tasks/:id', wrap((req) => {
   const id = idParam(req);
-  const before = get('SELECT * FROM tasks WHERE id = ?', id);
+  const before = getTask(id);
   if (!before) throw notFound();
   const data = pick(req.body, TASK_FIELDS);
-  const STATUS_TEXT = { todo: 'вернул задачу в «Открыта»', in_progress: 'взял задачу в работу', done: 'закрыл задачу' };
-  if (data.status && data.status !== before.status) {
-    systemComment(id, req.user.id, STATUS_TEXT[data.status] || `сменил статус на ${data.status}`);
+  const perms = taskPerms(req.user, before);
+  const statusChange = data.status && data.status !== before.status;
+  delete data.status;
+  // Изменились ли «содержательные» поля (всё, кроме статуса)?
+  const changed = Object.keys(data).filter((k) => (data[k] ?? null) !== (before[k] ?? null));
+  const membersChange = Array.isArray(req.body.coassignee_ids) || Array.isArray(req.body.observer_ids);
+  if (changed.length || membersChange) {
+    if (!perms.edit) throw new HttpError(403, 'Менять задачу может только постановщик или администратор');
+    if (before.status === 'done') throw new HttpError(403, 'Задача закрыта. Чтобы изменить её, сначала возобновите');
   }
-  if ('assignee_id' in data && (data.assignee_id ?? null) !== before.assignee_id) {
-    const who = data.assignee_id ? get('SELECT name FROM users WHERE id = ?', data.assignee_id)?.name : null;
-    systemComment(id, req.user.id, who ? `назначил исполнителя: ${who}` : 'снял исполнителя');
-  }
-  if (data.status && data.status !== before.status) {
-    data.completed_at = data.status === 'done' ? nowIso() : null;
-    if (data.status === 'done') logActivity(req.user.id, 'task', id, 'done', `закрыл задачу «${before.title}»`);
-    else if (before.status === 'done') logActivity(req.user.id, 'task', id, 'reopen', `вернул в работу задачу «${before.title}»`);
-  }
-  update('tasks', id, data);
-  return get(`${TASK_SELECT} WHERE t.id = ?`, id);
+  if (statusChange && !perms.status) throw new HttpError(403, 'Менять статус могут исполнитель, соисполнители, постановщик или администратор');
+
+  const STATUS_TEXT = { todo: before.status === 'done' ? 'возобновил задачу' : 'приостановил задачу', in_progress: 'начал выполнение задачи', done: 'завершил задачу' };
+  tx(() => {
+    if (statusChange) {
+      data.status = req.body.status;
+      data.completed_at = data.status === 'done' ? nowIso() : null;
+      systemComment(id, req.user.id, STATUS_TEXT[data.status] || `сменил статус на ${data.status}`);
+      if (data.status === 'done') logActivity(req.user.id, 'task', id, 'done', `закрыл задачу «${before.title}»`);
+      else if (before.status === 'done') logActivity(req.user.id, 'task', id, 'reopen', `возобновил задачу «${before.title}»`);
+    }
+    if (changed.includes('assignee_id')) {
+      systemComment(id, req.user.id, data.assignee_id ? `назначил исполнителя: ${userName(data.assignee_id)}` : 'снял исполнителя');
+    }
+    if (changed.includes('due_date')) {
+      systemComment(id, req.user.id, data.due_date ? `изменил крайний срок: ${data.due_date.split('-').reverse().join('.')}` : 'убрал крайний срок');
+    }
+    if (changed.includes('title') || changed.includes('description')) systemComment(id, req.user.id, 'изменил описание задачи');
+    update('tasks', id, data);
+    setTaskMembers(id, 'coassignee', req.body.coassignee_ids, req.user.id);
+    setTaskMembers(id, 'observer', req.body.observer_ids, req.user.id);
+  });
+  return getTask(id);
 }));
 api.delete('/tasks/:id', wrap((req) => {
   const id = idParam(req);
+  const t = getTask(id);
+  if (!t) throw notFound();
+  if (!taskPerms(req.user, t).edit) throw new HttpError(403, 'Удалить задачу может только постановщик или администратор');
   const files = all('SELECT stored FROM files WHERE task_id = ?', id);
   run('DELETE FROM tasks WHERE id = ?', id);
   files.forEach((f) => removeStored(f.stored));
@@ -650,7 +712,8 @@ api.get('/dashboard', wrap((req) => {
           SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) expense
         FROM transactions WHERE date >= date('now','start of month','-5 months') GROUP BY month ORDER BY month`),
     } : null,
-    my_tasks: all(`${TASK_SELECT} WHERE t.assignee_id = ? AND t.status != 'done' ORDER BY t.due_date IS NULL, t.due_date LIMIT 8`, req.user.id),
+    my_tasks: all(`${TASK_SELECT} WHERE t.status != 'done' AND (t.assignee_id = ? OR EXISTS (SELECT 1 FROM task_members m WHERE m.task_id = t.id AND m.user_id = ? AND m.role = 'coassignee'))
+      ORDER BY t.due_date IS NULL, t.due_date LIMIT 8`, req.user.id, req.user.id),
     urgent_tickets: all(`${TICKET_SELECT} WHERE k.status IN ('new','in_progress','waiting')
         ORDER BY CASE k.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END, k.due_at LIMIT 6`),
     activity: all(`SELECT a.*, u.name user_name, u.color user_color FROM activity a LEFT JOIN users u ON u.id = a.user_id

@@ -200,6 +200,14 @@ const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_files_task ON files(task_id);`);
     addColumn(d, 'task_comments', 'file_id', 'INTEGER REFERENCES files(id) ON DELETE SET NULL');
   },
+  // 4. Участники задачи: соисполнители и наблюдатели
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS task_members (
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK (role IN ('coassignee','observer')),
+      PRIMARY KEY (task_id, user_id, role)
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_members_user ON task_members(user_id);`),
 ];
 
 {
