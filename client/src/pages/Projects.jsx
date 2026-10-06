@@ -1,113 +1,103 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Info, Star, Activity, UserPlus, MoreHorizontal, Home, ChartGantt, Kanban, Clock, Plus, Search, User, Filter,
-  ArrowUpDown, EyeOff, Eye, ChevronDown, ChevronRight, Download, FolderKanban, X, Trash2,
+  Info, Star, MoreHorizontal, List, ChartGantt, Kanban, Clock, Plus, Search, User, X, ChevronDown, ChevronRight,
+  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo,
 } from 'lucide-react';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
-import { PROJECT_STATUS } from '../lib/constants';
-import { fmtDate, fmtHM, parseDate, plural, todayStr } from '../lib/format';
-import {
-  Button, IconButton, Tabs, Popover, MenuItem, StatusDot, Progress, AvatarStack, Card, Empty, Spinner, cx, Avatar,
-} from '../components/ui';
-import { ProjectDrawer, ProjectFormModal } from '../components/ProjectDrawer';
-import { ProjectKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
-
-const COLUMNS = [
-  { key: 'members', label: 'Участники' },
-  { key: 'status', label: 'Статус', info: true },
-  { key: 'progress', label: 'Прогресс' },
-  { key: 'time', label: 'Учтено времени', info: true },
-  { key: 'client', label: 'Клиент' },
-  { key: 'due', label: 'Срок' },
-  { key: 'visible', label: 'Задачи' },
-];
-const SORTS = {
-  due: { label: 'По сроку', fn: (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') },
-  name: { label: 'По названию', fn: (a, b) => a.name.localeCompare(b.name, 'ru') },
-  progress: { label: 'По прогрессу', fn: (a, b) => b.progress - a.progress },
-  time: { label: 'По времени', fn: (a, b) => b.tracked_sec - a.tracked_sec },
-  created: { label: 'Сначала новые', fn: (a, b) => b.id - a.id },
-};
-
-// Группировка по сроку сдачи, как «This month / Next month» на макете
-function groupKey(p) {
-  const d = parseDate(p.due_date);
-  if (!d) return 'none';
-  const now = new Date();
-  const m = (d.getFullYear() - now.getFullYear()) * 12 + d.getMonth() - now.getMonth();
-  if (p.status !== 'done' && d < new Date(now.getFullYear(), now.getMonth(), now.getDate())) return 'overdue';
-  if (m <= 0) return 'this';
-  if (m === 1) return 'next';
-  return 'later';
-}
-const GROUPS = [
-  ['overdue', 'Просрочено'], ['this', 'Этот месяц'], ['next', 'Следующий месяц'], ['later', 'Позже'], ['none', 'Без срока'],
-];
+import { TASK_STATUS, TASK_FILTERS } from '../lib/constants';
+import { fmtDate, fmtHM, todayStr, timeAgo } from '../lib/format';
+import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar } from '../components/ui';
+import { ProjectFormModal } from '../components/ProjectForm';
+import { TaskFormModal, TaskDrawer, TaskStatusButton, TaskStatusPill, isOverdue } from '../components/Tasks';
+import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
 
 export default function Projects() {
-  const { users, bump, toast, isManager } = useApp();
-  const { data, loading, setData } = useLoad('/projects');
+  const { users, bump, toast, startTimer } = useApp();
+  const { data: projectsData, loading } = useLoad('/projects');
+  const { data: tasksData, setData: setTasks } = useLoad('/tasks');
   const [params, setParams] = useSearchParams();
-  const [view, setView] = useStored('crm.projects.view', 'main');
-  const [q, setQ] = useState('');
-  const [searchOn, setSearchOn] = useState(false);
-  const [emp, setEmp] = useState(null);
-  const [statuses, setStatuses] = useState([]);
-  const [sort, setSort] = useStored('crm.projects.sort', 'due');
-  const [hidden, setHidden] = useStored('crm.projects.hidden', ['client']);
-  const [collapsed, setCollapsed] = useStored('crm.projects.collapsed', ['next', 'later']);
+  const [view, setView] = useStored('crm.projects.view2', 'list');
+  const [filter, setFilter] = useStored('crm.tasks.filter', 'open');
+  const [expanded, setExpanded] = useStored('crm.projects.expanded', []);
   const [starred, setStarred] = useStored('crm.starred', []);
-  const [selected, setSelected] = useState([]);
+  const [q, setQ] = useState('');
+  const [emp, setEmp] = useState(null);
   const [onlyStarred, setOnlyStarred] = useState(false);
-  const [openId, setOpenId] = useState(null);
-  const [formOpen, setFormOpen] = useState(false);
+  const [taskId, setTaskId] = useState(null);
+  const [taskForm, setTaskForm] = useState(null);      // { projectId } | null
+  const [projectForm, setProjectForm] = useState(null); // {} — новый, project — редактирование
 
+  // Переходы из поиска, дашборда, избранного: ?open=<проект>&task=<задача>&new=1
   useEffect(() => {
-    const o = params.get('open'); if (o) setOpenId(Number(o));
-    if (params.get('new')) setFormOpen(true);
-    if (o || params.get('new')) setParams({}, { replace: true });
-  }, [params, setParams]);
+    const o = Number(params.get('open')); const t = Number(params.get('task'));
+    if (o) {
+      setExpanded((e) => (e.includes(o) ? e : [...e, o]));
+      setTimeout(() => document.getElementById(`project-${o}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    }
+    if (t) setTaskId(t);
+    if (params.get('new')) setProjectForm({});
+    if (params.get('newtask')) setTaskForm({ projectId: o || null });
+    if (o || t || params.get('new') || params.get('newtask')) setParams({}, { replace: true });
+  }, [params, setParams, setExpanded]);
 
+  const today = todayStr();
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
-  const list = useMemo(() => {
-    let l = data || [];
-    if (q) l = l.filter((p) => (p.name + ' ' + (p.client_name || '')).toLowerCase().includes(q.toLowerCase()));
-    if (emp) l = l.filter((p) => p.member_ids.includes(emp) || p.owner_id === emp);
-    if (statuses.length) l = l.filter((p) => statuses.includes(p.status));
-    if (onlyStarred) l = l.filter((p) => starred.includes(p.id));
-    return [...l].sort(SORTS[sort]?.fn || SORTS.due.fn);
-  }, [data, q, emp, statuses, sort, onlyStarred, starred]);
+  const projects = projectsData || [];
+  const tasks = tasksData || [];
 
-  const patch = async (id, body) => {
-    setData((d) => d.map((p) => (p.id === id ? { ...p, ...body } : p)));
-    try {
-      const upd = await api.put(`/projects/${id}`, body);
-      setData((d) => d.map((p) => (p.id === id ? upd : p)));
-    } catch (e) { toast(e.message, 'error'); bump(); }
-  };
-  const bulk = async (body) => {
-    await Promise.all(selected.map((id) => api.put(`/projects/${id}`, body)));
-    setSelected([]); bump(); toast('Готово');
-  };
-  const bulkDelete = async () => {
-    await Promise.all(selected.map((id) => api.del(`/projects/${id}`)));
-    setSelected([]); bump(); toast('Проекты удалены');
+  // Задачи после фильтров (статус, сотрудник, поиск)
+  const ql = q.trim().toLowerCase();
+  const visibleTasks = useMemo(() => tasks.filter((t) =>
+    TASK_FILTERS[filter].test(t, today)
+    && (!emp || t.assignee_id === emp)
+    && (!ql || `${t.title} ${t.description || ''}`.toLowerCase().includes(ql))), [tasks, filter, emp, ql, today]);
+
+  const byProject = useMemo(() => {
+    const m = {};
+    for (const t of visibleTasks) (m[t.project_id] ??= []).push(t);
+    return m;
+  }, [visibleTasks]);
+  const counts = useMemo(() => {
+    const m = {};
+    for (const t of tasks) {
+      const c = (m[t.project_id] ??= { open: 0, in_progress: 0, overdue: 0, done: 0, total: 0 });
+      c.total++;
+      if (t.status === 'done') c.done++; else c.open++;
+      if (t.status === 'in_progress') c.in_progress++;
+      if (isOverdue(t)) c.overdue++;
+    }
+    return m;
+  }, [tasks]);
+
+  const list = useMemo(() => projects.filter((p) => {
+    if (onlyStarred && !starred.includes(p.id)) return false;
+    if (ql || emp) return p.name.toLowerCase().includes(ql) && !emp ? true : !!byProject[p.id]?.length;
+    return true;
+  }).sort((a, b) => (b.status !== 'done') - (a.status !== 'done') || (counts[b.id]?.overdue || 0) - (counts[a.id]?.overdue || 0) || a.name.localeCompare(b.name, 'ru')),
+  [projects, onlyStarred, starred, ql, emp, byProject, counts]);
+
+  const filterCounts = useMemo(() => Object.fromEntries(Object.keys(TASK_FILTERS).map((k) =>
+    [k, tasks.filter((t) => TASK_FILTERS[k].test(t, today) && (!emp || t.assignee_id === emp)).length])), [tasks, today, emp]);
+
+  const toggle = (id) => setExpanded((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]));
+  const searching = !!(ql || emp);
+
+  const patchTask = async (id, body) => {
+    setTasks((d) => d.map((t) => (t.id === id ? { ...t, ...body } : t)));
+    try { await api.put(`/tasks/${id}`, body); bump(); } catch (e) { toast(e.message, 'error'); bump(); }
   };
 
   const exportCsv = () => {
-    const rows = [['Проект', 'Статус', 'Прогресс', 'Часы', 'Клиент', 'Начало', 'Срок', 'Бюджет', 'Участники']];
-    list.forEach((p) => rows.push([p.name, PROJECT_STATUS[p.status].label, p.progress + '%', (p.tracked_sec / 3600).toFixed(1).replace('.', ','),
-      p.client_name || '', p.start_date || '', p.due_date || '', p.budget || 0, p.member_ids.map((i) => userMap[i]?.name).join(', ')]));
+    const rows = [['Проект', 'Задача', 'Описание', 'Статус', 'Исполнитель', 'Срок', 'Создана', 'Закрыта']];
+    visibleTasks.forEach((t) => rows.push([t.project_name, t.title, t.description || '', TASK_STATUS[t.status].label,
+      userMap[t.assignee_id]?.name || '', t.due_date || '', (t.created_at || '').slice(0, 10), (t.completed_at || '').slice(0, 10)]));
     const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `projects-${todayStr()}.csv`;
-    a.click();
+    a.download = `tasks-${today}.csv`; a.click();
   };
-
-  const cols = COLUMNS.filter((c) => !hidden.includes(c.key));
 
   return (
     <div>
@@ -116,241 +106,224 @@ export default function Projects() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-[26px] font-semibold tracking-tight">Проекты</h1>
-            <span title="Проекты группируются по сроку сдачи. Прогресс считается по выполненным задачам." className="text-ink-2"><Info size={19} /></span>
+            <span title="Проект — это организация, которую вы обслуживаете. Нажмите на проект, чтобы увидеть его задачи." className="text-ink-2"><Info size={19} /></span>
             <button onClick={() => setOnlyStarred((v) => !v)} title={onlyStarred ? 'Показать все проекты' : 'Только избранные'}>
               <Star size={19} className={cx('text-ink-2', onlyStarred && 'fill-amber-400 text-amber-400')} />
             </button>
           </div>
-          <p className="text-ink-2 text-[14px] mt-1">Назначайте ответственных, задавайте сроки и следите за прогрессом проектов.</p>
+          <p className="text-ink-2 text-[14px] mt-1">Организации, которые вы обслуживаете, и задачи по каждой из них.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Popover align="right" width={360} trigger={({ toggle }) => <Button icon={Activity} onClick={toggle}>Активность</Button>}>
-            <ActivityList />
-          </Popover>
-          <Popover align="right" width={280} trigger={({ toggle }) => <Button icon={UserPlus} onClick={toggle}>Участники</Button>}>
-            <div className="px-2.5 pt-1 pb-2 text-[12px] font-medium text-ink-3">Команда · {users.filter((u) => u.active).length}</div>
-            {users.filter((u) => u.active).map((u) => (
-              <div key={u.id} className="flex items-center gap-2.5 px-2.5 py-1.5">
-                <Avatar user={u} size={26} ring={false} />
-                <div className="min-w-0 flex-1"><div className="text-[13px] truncate">{u.name}</div><div className="text-[11.5px] text-ink-3 truncate">{u.position}</div></div>
-                <span className="text-[11.5px] text-ink-3">{u.open_tasks} зад.</span>
-              </div>
-            ))}
-          </Popover>
-          <Popover align="right" width={200} trigger={({ toggle }) => <IconButton icon={MoreHorizontal} onClick={toggle} title="Ещё" />}>
-            {({ close }) => <MenuItem icon={Download} onClick={() => { exportCsv(); close(); }}>Экспорт в CSV</MenuItem>}
-          </Popover>
+          <Button icon={Download} onClick={exportCsv}>Экспорт задач</Button>
+          <Button variant="primary" icon={Plus} onClick={() => setProjectForm({})}>Новый проект</Button>
         </div>
       </div>
 
-      {/* Вкладки */}
-      <div className="mt-5 flex items-end justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <Tabs value={view} onChange={setView} tabs={[
-            { value: 'main', label: 'Основной вид', icon: Home },
-            { value: 'gantt', label: 'Диаграмма Ганта', icon: ChartGantt },
-            { value: 'kanban', label: 'Канбан', icon: Kanban },
-            { value: 'time', label: 'Учёт времени', icon: Clock },
-          ]} />
-        </div>
-        <div className="hidden xl:flex items-center gap-2 pb-1.5">
-          <Button icon={Download} onClick={exportCsv}>Экспорт</Button>
-        </div>
+      <div className="mt-5">
+        <Tabs value={view} onChange={setView} tabs={[
+          { value: 'list', label: 'Проекты и задачи', icon: List },
+          { value: 'kanban', label: 'Канбан задач', icon: Kanban },
+          { value: 'gantt', label: 'Диаграмма Ганта', icon: ChartGantt },
+          { value: 'time', label: 'Учёт времени', icon: Clock },
+        ]} />
       </div>
 
-      {/* Панель инструментов */}
-      <div className="flex flex-wrap items-center gap-2 mt-4">
-        <Button variant="primary" icon={Plus} onClick={() => setFormOpen(true)}>Новый проект</Button>
-        {searchOn || q ? (
-          <div className="flex items-center gap-1.5 h-9 px-3 rounded-full border border-violet/40 bg-panel">
+      {/* Панель фильтров */}
+      {view !== 'time' && view !== 'gantt' && (
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          {view === 'list' && (
+            <div className="flex items-center gap-0.5 p-0.5 rounded-full border border-line bg-panel max-w-full overflow-x-auto">
+              {Object.entries(TASK_FILTERS).map(([k, f]) => (
+                <button key={k} onClick={() => setFilter(k)}
+                  className={cx('flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-medium transition-colors whitespace-nowrap shrink-0',
+                    filter === k ? (k === 'overdue' ? 'bg-red-600 text-white' : 'bg-ink text-white') : k === 'overdue' && filterCounts.overdue ? 'text-red-600' : 'text-ink-2 hover:text-ink')}>
+                  {f.label}<span className={cx('text-[11px] tabular', filter === k ? 'opacity-70' : 'text-ink-3')}>{filterCounts[k]}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className={cx('flex items-center gap-1.5 h-9 px-3 rounded-full border bg-panel', q ? 'border-violet/40' : 'border-line')}>
             <Search size={15} className="text-ink-3" />
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onBlur={() => !q && setSearchOn(false)} placeholder="Название или клиент"
-              className="outline-none text-[13px] w-44 bg-transparent" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по задачам" className="outline-none text-[13px] w-40 bg-transparent" />
             {q && <button onClick={() => setQ('')}><X size={14} className="text-ink-3" /></button>}
           </div>
-        ) : <button className="chip" onClick={() => setSearchOn(true)}><Search size={15} />Поиск</button>}
-
-        <Popover width={240} trigger={({ toggle }) => (
-          <button className={cx('chip', emp && 'chip-active')} onClick={toggle}>
-            {emp ? <Avatar user={userMap[emp]} size={18} ring={false} /> : <User size={15} />}
-            {emp ? userMap[emp]?.name.split(' ')[0] : 'Сотрудник'}
-          </button>
-        )}>
-          {({ close }) => (<>
-            <MenuItem checked={!emp} onClick={() => { setEmp(null); close(); }}>Все сотрудники</MenuItem>
-            {users.filter((u) => u.active).map((u) => <MenuItem key={u.id} checked={emp === u.id} onClick={() => { setEmp(u.id); close(); }}>{u.name}</MenuItem>)}
-          </>)}
-        </Popover>
-
-        <Popover width={220} trigger={({ toggle }) => (
-          <button className={cx('chip', statuses.length && 'chip-active')} onClick={toggle}>
-            <Filter size={15} />Фильтр{statuses.length ? ` · ${statuses.length}` : ''}
-          </button>
-        )}>
-          <div className="px-2.5 py-1 text-[11.5px] font-medium text-ink-3">Статус</div>
-          {Object.entries(PROJECT_STATUS).map(([k, s]) => (
-            <MenuItem key={k} checked={statuses.includes(k)} onClick={() => setStatuses((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k]))}>
-              <StatusDot color={s.color} label={s.label} />
-            </MenuItem>
-          ))}
-          {statuses.length > 0 && <><div className="h-px bg-line my-1" /><MenuItem onClick={() => setStatuses([])}>Сбросить</MenuItem></>}
-        </Popover>
-
-        <Popover width={200} trigger={({ toggle }) => <button className="chip" onClick={toggle}><ArrowUpDown size={15} />Сортировка</button>}>
-          {({ close }) => Object.entries(SORTS).map(([k, s]) => <MenuItem key={k} checked={sort === k} onClick={() => { setSort(k); close(); }}>{s.label}</MenuItem>)}
-        </Popover>
-
-        {view === 'main' && (
-          <Popover width={220} trigger={({ toggle }) => <button className={cx('chip', hidden.length && 'chip-active')} onClick={toggle}><EyeOff size={15} />Скрыть{hidden.length ? ` · ${hidden.length}` : ''}</button>}>
-            <div className="px-2.5 py-1 text-[11.5px] font-medium text-ink-3">Колонки</div>
-            {COLUMNS.map((c) => (
-              <MenuItem key={c.key} checked={!hidden.includes(c.key)} onClick={() => setHidden((h) => (h.includes(c.key) ? h.filter((x) => x !== c.key) : [...h, c.key]))}>{c.label}</MenuItem>
-            ))}
+          <Popover width={240} trigger={({ toggle: t }) => (
+            <button className={cx('chip', emp && 'chip-active')} onClick={t}>
+              {emp ? <Avatar user={userMap[emp]} size={18} ring={false} /> : <User size={15} />}
+              {emp ? userMap[emp]?.name.split(' ')[0] : 'Исполнитель'}
+            </button>
+          )}>
+            {({ close }) => (<>
+              <MenuItem checked={!emp} onClick={() => { setEmp(null); close(); }}>Все</MenuItem>
+              {users.filter((u) => u.active).map((u) => <MenuItem key={u.id} checked={emp === u.id} onClick={() => { setEmp(u.id); close(); }}>{u.name}</MenuItem>)}
+            </>)}
           </Popover>
-        )}
-
-        {selected.length > 0 && (
-          <div className="flex items-center gap-2 ml-auto pl-3 pr-1.5 h-9 rounded-full bg-ink text-white text-[13px] anim-pop">
-            Выбрано: {selected.length}
-            <Popover align="right" width={200} trigger={({ toggle }) => <button onClick={toggle} className="h-7 px-2.5 rounded-full bg-white/15 hover:bg-white/25">Статус</button>}>
-              {({ close }) => Object.entries(PROJECT_STATUS).map(([k, s]) => <MenuItem key={k} onClick={() => { bulk({ status: k }); close(); }}><StatusDot color={s.color} label={s.label} /></MenuItem>)}
-            </Popover>
-            {isManager && <button onClick={bulkDelete} className="h-7 px-2.5 rounded-full bg-white/15 hover:bg-red-500 flex items-center gap-1"><Trash2 size={13} />Удалить</button>}
-            <button onClick={() => setSelected([])} className="p-1 rounded-full hover:bg-white/15"><X size={14} /></button>
-          </div>
-        )}
-      </div>
+          {view === 'list' && (
+            <div className="ml-auto flex items-center gap-1">
+              <button className="chip" onClick={() => setExpanded(list.map((p) => p.id))} title="Развернуть все"><ChevronsUpDown size={15} />Развернуть</button>
+              <button className="chip" onClick={() => setExpanded([])} title="Свернуть все"><ChevronsDownUp size={15} />Свернуть</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Контент */}
-      <div className="mt-5">
-        {loading && !data ? <Spinner /> : list.length === 0 ? (
-          <Card><Empty icon={FolderKanban} title={data?.length ? 'Ничего не найдено' : 'Проектов пока нет'}
-            text={data?.length ? 'Попробуйте изменить фильтры' : 'Создайте первый проект и добавьте в него задачи'}
-            action={!data?.length && <Button variant="primary" icon={Plus} onClick={() => setFormOpen(true)}>Новый проект</Button>} /></Card>
-        ) : view === 'main' ? (
-          <div className="rounded-2xl bg-canvas/60 border border-line p-2.5 space-y-2.5">
-            {GROUPS.map(([key, label]) => {
-              const items = list.filter((p) => groupKey(p) === key);
-              if (!items.length) return null;
-              const isCol = collapsed.includes(key);
-              return (
-                <section key={key} className="bg-panel rounded-xl border border-line">
-                  <button onClick={() => setCollapsed((c) => (isCol ? c.filter((x) => x !== key) : [...c, key]))}
-                    className="flex items-center gap-2 px-4 pt-3.5 pb-3 text-[13.5px] font-medium">
-                    {isCol ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                    <span className={key === 'overdue' ? 'text-red-600' : ''}>{label}</span>
-                    <span className="text-ink-3 font-normal text-[12px]">{items.length}</span>
-                  </button>
-                  {isCol ? (
-                    <div className="px-4 pb-4 -mt-1 text-[12.5px] text-ink-3">
-                      {items.length} {plural(items.length, 'проект скрыт', 'проекта скрыты', 'проектов скрыто')} в этой группе
-                    </div>
-                  ) : (
-                    <div className="px-2 pb-2 overflow-x-auto">
-                      <table className="w-full border border-line rounded-lg border-separate border-spacing-0 overflow-hidden">
-                        <thead>
-                          <tr className="bg-canvas/70">
-                            <th className="th w-10 border-b border-line">
-                              <input type="checkbox" className="accent-violet size-4 align-middle"
-                                checked={items.every((p) => selected.includes(p.id))}
-                                onChange={(e) => setSelected((s) => (e.target.checked ? [...new Set([...s, ...items.map((p) => p.id)])] : s.filter((id) => !items.some((p) => p.id === id))))} />
-                            </th>
-                            {cols.find((c) => c.key === 'members') && <th className="th border-b border-l border-line">Участники</th>}
-                            <th className="th border-b border-l border-line min-w-[220px]">Проект</th>
-                            {cols.filter((c) => c.key !== 'members').map((c) => (
-                              <th key={c.key} className={cx('th border-b border-l border-line', c.key === 'visible' && 'text-center')}>
-                                <span className="inline-flex items-center gap-1.5">{c.label}{c.info && <Info size={13} className="text-ink-3" />}</span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((p) => (
-                            <ProjectRow key={p.id} p={p} cols={cols} userMap={userMap} selected={selected.includes(p.id)}
-                              onSelect={(v) => setSelected((s) => (v ? [...s, p.id] : s.filter((x) => x !== p.id)))}
-                              onOpen={() => setOpenId(p.id)} onPatch={(b) => patch(p.id, b)}
-                              starred={starred.includes(p.id)} onStar={() => setStarred((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))} />
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+      <div className="mt-4">
+        {loading && !projectsData ? <Spinner /> : projects.length === 0 ? (
+          <Card><Empty icon={FolderKanban} title="Проектов пока нет" text="Создайте проект для каждой организации, которую обслуживаете, и добавляйте в него задачи"
+            action={<Button variant="primary" icon={Plus} onClick={() => setProjectForm({})}>Новый проект</Button>} /></Card>
+        ) : view === 'list' ? (
+          list.length === 0 ? <Card><Empty icon={Search} title="Ничего не найдено" text="Измените поиск или фильтр" /></Card> : (
+            <div className="space-y-2.5">
+              {list.map((p) => (
+                <ProjectBlock key={p.id} p={p} c={counts[p.id] || { open: 0, in_progress: 0, overdue: 0, done: 0, total: 0 }}
+                  tasks={byProject[p.id] || []} filter={filter} userMap={userMap}
+                  open={searching ? !!byProject[p.id]?.length || expanded.includes(p.id) : expanded.includes(p.id)}
+                  onToggle={() => toggle(p.id)} starred={starred.includes(p.id)}
+                  onStar={() => setStarred((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))}
+                  onAddTask={() => setTaskForm({ projectId: p.id })} onEdit={() => setProjectForm(p)}
+                  onTimer={() => startTimer({ project_id: p.id })}
+                  onOpenTask={setTaskId} onPatchTask={patchTask} />
+              ))}
+            </div>
+          )
         ) : view === 'kanban' ? (
-          <ProjectKanban projects={list} userMap={userMap} onOpen={setOpenId} onPatch={patch} />
+          <TaskKanban tasks={tasks.filter((t) => (!emp || t.assignee_id === emp) && (!ql || `${t.title} ${t.description || ''} ${t.project_name}`.toLowerCase().includes(ql)))}
+            userMap={userMap} onOpen={setTaskId} onPatch={patchTask} />
         ) : view === 'gantt' ? (
-          <ProjectGantt projects={list} onOpen={setOpenId} />
+          <ProjectGantt projects={projects} onOpen={(id) => { setView('list'); setExpanded((e) => [...new Set([...e, id])]); }} />
         ) : (
-          <ProjectTimeView projects={list} />
+          <ProjectTimeView projects={projects} />
         )}
       </div>
 
-      <ProjectDrawer id={openId} onClose={() => setOpenId(null)} />
-      <ProjectFormModal open={formOpen} onClose={() => setFormOpen(false)} onSaved={(p) => { bump(); setOpenId(p.id); }} />
+      <TaskDrawer id={taskId} onClose={() => setTaskId(null)} />
+      <TaskFormModal open={!!taskForm} projectId={taskForm?.projectId} onClose={() => setTaskForm(null)}
+        onSaved={(t) => setExpanded((e) => (e.includes(t.project_id) ? e : [...e, t.project_id]))} />
+      <ProjectFormModal open={!!projectForm} project={projectForm?.id ? projectForm : null} onClose={() => setProjectForm(null)}
+        onSaved={(p) => setExpanded((e) => (e.includes(p.id) ? e : [...e, p.id]))} />
     </div>
   );
 }
 
-function ProjectRow({ p, cols, userMap, selected, onSelect, onOpen, onPatch, starred, onStar }) {
-  const has = (k) => cols.some((c) => c.key === k);
+function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, onStar, onAddTask, onEdit, onTimer, onOpenTask, onPatchTask }) {
   const members = p.member_ids.map((id) => userMap[id]).filter(Boolean);
-  const st = PROJECT_STATUS[p.status];
-  const overdue = p.status !== 'done' && p.due_date && parseDate(p.due_date) < new Date(new Date().toDateString());
+  const progress = c.total ? Math.round((c.done / c.total) * 100) : 0;
+  const initial = p.name.replace(/[«»"]/g, '').replace(/^(ООО|АО|ИП|ПАО|ГБУ|ГУП|ФГБОУ)\s+/i, '').trim()[0] || '?';
   return (
-    <tr className={cx('group hover:bg-canvas/60', selected && 'bg-violet/[.04]')}>
-      <td className="td border-b border-line"><input type="checkbox" className="accent-violet size-4 align-middle opacity-40 group-hover:opacity-100 checked:opacity-100" checked={selected} onChange={(e) => onSelect(e.target.checked)} /></td>
-      {has('members') && <td className="td border-b border-l border-line"><AvatarStack users={members} /></td>}
-      <td className="td border-b border-l border-line">
-        <div className="flex items-center gap-2">
-          <button onClick={onOpen} className="text-ink hover:text-violet font-[450] text-left truncate max-w-[320px]">{p.name}</button>
-          <button onClick={onStar} className={cx('transition-opacity', starred ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')} title="В избранное">
-            <Star size={14} className={starred ? 'fill-amber-400 text-amber-400' : 'text-ink-3'} />
-          </button>
-        </div>
-      </td>
-      {cols.filter((c) => c.key !== 'members').map((c) => {
-        const cls = cx('td border-b border-l border-line', c.key === 'visible' && 'text-center');
-        switch (c.key) {
-          case 'status': return (
-            <td key={c.key} className={cls}>
-              <Popover width={190} trigger={({ toggle }) => <button onClick={toggle} className="hover:opacity-80"><StatusDot color={st.color} label={st.label} /></button>}>
-                {({ close }) => Object.entries(PROJECT_STATUS).map(([k, s]) => (
-                  <MenuItem key={k} checked={k === p.status} onClick={() => { onPatch({ status: k }); close(); }}><StatusDot color={s.color} label={s.label} /></MenuItem>
-                ))}
-              </Popover>
-            </td>);
-          case 'progress': return <td key={c.key} className={cls}><Progress value={p.progress} /></td>;
-          case 'time': return <td key={c.key} className={cls}><span className="inline-flex items-center gap-2 text-ink-3 tabular"><Clock size={15} />{fmtHM(p.tracked_sec)} ч</span></td>;
-          case 'client': return <td key={c.key} className={cx(cls, 'max-w-[180px] truncate')}>{p.client_name || <span className="text-ink-3">—</span>}</td>;
-          case 'due': return <td key={c.key} className={cx(cls, overdue && 'text-red-600 font-medium')}>{fmtDate(p.due_date)}</td>;
-          case 'visible': return (
-            <td key={c.key} className={cls}>
-              <button onClick={onOpen} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-line text-[12px] font-medium text-ink hover:bg-canvas">
-                <Eye size={13} />Задачи · {p.tasks_done}/{p.tasks_total}
+    <section id={`project-${p.id}`} className={cx('bg-panel rounded-2xl border transition-shadow scroll-mt-4', open ? 'border-line-strong shadow-[0_2px_10px_-4px_rgba(16,24,40,.08)]' : 'border-line')}>
+      {/* Шапка проекта */}
+      <div onClick={onToggle} className="group flex flex-wrap xl:flex-nowrap items-center gap-x-4 gap-y-2 px-4 py-3.5 cursor-pointer select-none">
+        <div className="flex items-center gap-3 min-w-0 flex-1 basis-[260px] xl:basis-0">
+          <span className="text-ink-3">{open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
+          <span className="size-9 rounded-xl bg-brand/30 text-brand-ink font-semibold flex items-center justify-center shrink-0">{initial.toUpperCase()}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[15px] font-semibold truncate">{p.name}</span>
+              <button onClick={(e) => { e.stopPropagation(); onStar(); }} className={cx('transition-opacity', starred ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')} title="В избранное">
+                <Star size={14} className={starred ? 'fill-amber-400 text-amber-400' : 'text-ink-3'} />
               </button>
-            </td>);
-          default: return null;
-        }
-      })}
-    </tr>
+            </div>
+            {p.description && <div className="text-[12.5px] text-ink-3 truncate">{p.description}</div>}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-[12px] xl:flex-nowrap xl:shrink-0">
+          <Counter label="Открыто" n={c.open} />
+          <Counter label="В работе" n={c.in_progress} dot="var(--color-st-progress)" />
+          {c.overdue > 0 && <Counter label="Просрочено" n={c.overdue} tone="red" />}
+          <Counter label="Закрыто" n={c.done} dot="var(--color-st-done)" />
+        </div>
+
+        <div className="hidden md:flex items-center gap-2 w-[110px] shrink-0" title={`Закрыто ${c.done} из ${c.total}`}>
+          <div className="flex-1 h-1.5 rounded-full bg-line overflow-hidden"><div className="h-full rounded-full bg-st-done" style={{ width: `${progress}%` }} /></div>
+          <span className="text-[11.5px] text-ink-3 tabular w-8 text-right">{progress}%</span>
+        </div>
+        <span className="hidden 2xl:inline-flex items-center gap-1.5 text-[12px] text-ink-3 tabular w-[78px] shrink-0" title="Учтено времени всего"><Clock size={13} />{fmtHM(p.tracked_sec)} ч</span>
+        <div className="hidden sm:block shrink-0"><AvatarStack users={members} max={3} size={24} /></div>
+
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto xl:ml-0" onClick={(e) => e.stopPropagation()}>
+          <Button size="sm" icon={Plus} onClick={onAddTask}>Задача</Button>
+          <Popover align="right" width={200} trigger={({ toggle }) => <IconButton icon={MoreHorizontal} size={32} title="Ещё" onClick={toggle} />}>
+            {({ close }) => (<>
+              <MenuItem icon={Settings2} onClick={() => { close(); onEdit(); }}>Настройки проекта</MenuItem>
+              <MenuItem icon={Play} onClick={() => { close(); onTimer(); }}>Таймер на проект</MenuItem>
+              <MenuItem icon={Star} onClick={() => { close(); onStar(); }}>{starred ? 'Убрать из избранного' : 'В избранное'}</MenuItem>
+            </>)}
+          </Popover>
+        </div>
+      </div>
+
+      {/* Задачи */}
+      {open && (
+        <div className="border-t border-line">
+          {tasks.length === 0 ? (
+            <div className="flex items-center justify-between gap-3 px-5 py-5 text-[13px] text-ink-3">
+              <span className="flex items-center gap-2"><ListTodo size={16} />{c.total ? `Нет задач с фильтром «${TASK_FILTERS[filter].label}»` : 'Задач пока нет'}</span>
+              <Button size="sm" variant="primary" icon={Plus} onClick={onAddTask}>Добавить задачу</Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-canvas/60 border-b border-line">
+                    <th className="th w-10" />
+                    <th className="th min-w-[300px]">Задача</th>
+                    <th className="th">Статус</th>
+                    <th className="th">Исполнитель</th>
+                    <th className="th">Срок</th>
+                    <th className="th">Создана</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.map((t) => {
+                    const late = isOverdue(t);
+                    const a = userMap[t.assignee_id];
+                    return (
+                      <tr key={t.id} onClick={() => onOpenTask(t.id)} className="border-b border-line last:border-0 hover:bg-canvas/50 cursor-pointer">
+                        <td className="td pr-0"><TaskStatusButton task={t} onChange={(s) => onPatchTask(t.id, { status: s })} /></td>
+                        <td className="td whitespace-normal">
+                          <div className={cx('text-[13.5px] font-[450]', t.status === 'done' ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</div>
+                          {t.description && <div className="text-[12px] text-ink-3 line-clamp-1 max-w-[560px]">{t.description}</div>}
+                        </td>
+                        <td className="td" onClick={(e) => e.stopPropagation()}>
+                          <Popover width={180} trigger={({ toggle }) => <button onClick={toggle}><TaskStatusPill status={t.status} /></button>}>
+                            {({ close }) => Object.entries(TASK_STATUS).map(([k, s]) => (
+                              <MenuItem key={k} checked={k === t.status} onClick={() => { onPatchTask(t.id, { status: k }); close(); }}>
+                                <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full" style={{ background: s.color }} />{s.label}</span>
+                              </MenuItem>
+                            ))}
+                          </Popover>
+                        </td>
+                        <td className="td">
+                          <span className="flex items-center gap-2">{a ? <><Avatar user={a} size={22} ring={false} />{a.name.split(' ')[0]}</> : <span className="text-ink-3">—</span>}</span>
+                        </td>
+                        <td className={cx('td', late && 'text-red-600 font-medium')}>
+                          {t.due_date ? <span className="inline-flex items-center gap-1.5"><Calendar size={13} className={late ? '' : 'text-ink-3'} />{fmtDate(t.due_date)}</span> : <span className="text-ink-3">—</span>}
+                        </td>
+                        <td className="td text-ink-3 text-[12px]">{timeAgo(t.created_at)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <button onClick={onAddTask} className="w-full flex items-center gap-2 px-5 h-11 text-[13px] text-ink-3 hover:text-ink hover:bg-canvas/50 border-t border-line rounded-b-2xl">
+                <Plus size={15} />Новая задача
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
-function ActivityList() {
-  const { data } = useLoad('/activity');
+function Counter({ label, n, dot, tone }) {
   return (
-    <div className="max-h-96 overflow-y-auto">
-      <div className="px-2.5 pt-1 pb-2 text-[13px] font-semibold">Активность команды</div>
-      {(data || []).slice(0, 30).map((a) => (
-        <div key={a.id} className="flex gap-2.5 px-2.5 py-2 text-[12.5px]">
-          <Avatar user={{ name: a.user_name || '?', color: a.user_color }} size={24} ring={false} />
-          <div><span className="font-medium">{a.user_name}</span> <span className="text-ink-2">{a.text}</span>
-            <div className="text-[11px] text-ink-3">{fmtDate(a.created_at)}</div></div>
-        </div>
-      ))}
-    </div>
+    <span className={cx('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border whitespace-nowrap',
+      tone === 'red' ? 'border-red-200 bg-red-50 text-red-700' : 'border-line bg-canvas/60 text-ink-2', !n && tone !== 'red' && 'opacity-50')}>
+      {dot && <span className="size-2 rounded-full" style={{ background: dot }} />}
+      {label} <b className="font-semibold tabular">{n}</b>
+    </span>
   );
 }

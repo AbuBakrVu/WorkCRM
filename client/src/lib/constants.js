@@ -7,9 +7,18 @@ export const PROJECT_STATUS = {
 };
 
 export const TASK_STATUS = {
-  todo: { label: 'К выполнению', color: 'var(--color-st-planned)' },
+  todo: { label: 'Открыта', color: '#a5b4fc' },
   in_progress: { label: 'В работе', color: 'var(--color-st-progress)' },
-  done: { label: 'Готово', color: 'var(--color-st-done)' },
+  done: { label: 'Закрыта', color: 'var(--color-st-done)' },
+};
+
+// Фильтр задач на странице проектов
+export const TASK_FILTERS = {
+  open: { label: 'Открытые', test: (t) => t.status !== 'done' },
+  in_progress: { label: 'В работе', test: (t) => t.status === 'in_progress' },
+  overdue: { label: 'Просроченные', test: (t, today) => t.status !== 'done' && t.due_date && t.due_date < today },
+  done: { label: 'Закрытые', test: (t) => t.status === 'done' },
+  all: { label: 'Все', test: () => true },
 };
 
 export const TICKET_STATUS = {

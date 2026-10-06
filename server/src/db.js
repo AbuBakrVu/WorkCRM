@@ -157,10 +157,22 @@ CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_activity_date ON activity(created_at);
 `);
 
-// Миграции схемы для уже работающей базы. Только ДОБАВЛЯЙТЕ новые элементы в конец массива,
-// существующие не меняйте и не удаляйте. Номер миграции = индекс + 1 (хранится в PRAGMA user_version).
-// Пример: (d) => d.exec("ALTER TABLE tickets ADD COLUMN inventory_no TEXT"),
+// Миграции схемы. Выполняются и на старых, и на новых базах (CREATE TABLE выше — базовая схема v0,
+// её НЕ меняем: все новые колонки/таблицы/индексы — только миграцией).
+// Только ДОБАВЛЯЙТЕ элементы в конец массива; существующие не меняйте и не удаляйте.
+// Номер миграции = индекс + 1 (хранится в PRAGMA user_version).
+const addColumn = (d, table, col, def) => {
+  const cols = d.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+};
 const MIGRATIONS = [
+  // 1. Задачи: когда закрыта и кто создал
+  (d) => {
+    addColumn(d, 'tasks', 'completed_at', 'TEXT');
+    addColumn(d, 'tasks', 'created_by', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
+    d.exec("UPDATE tasks SET completed_at = created_at WHERE status = 'done' AND completed_at IS NULL");
+    d.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, due_date)');
+  },
 ];
 
 {

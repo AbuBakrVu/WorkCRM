@@ -217,7 +217,7 @@ const KIND = {
   ticket: { icon: Ticket, label: 'Заявка', url: (r) => `/tickets?open=${r.id}`, sub: (r) => `#${r.id} · ${TICKET_STATUS[r.sub]?.label}` },
   client: { icon: Building2, label: 'Клиент', url: (r) => `/clients?open=${r.id}`, sub: (r) => r.sub },
   deal: { icon: Handshake, label: 'Сделка', url: () => '/pipeline', sub: (r) => DEAL_STAGE[r.sub]?.label },
-  task: { icon: ListTodo, label: 'Задача', url: (r) => `/projects?open=${r.project_id}`, sub: (r) => r.sub },
+  task: { icon: ListTodo, label: 'Задача', url: (r) => `/projects?open=${r.project_id}&task=${r.id}`, sub: (r) => r.sub },
 };
 
 function SearchModal({ open, onClose }) {
@@ -234,6 +234,7 @@ function SearchModal({ open, onClose }) {
   }, [q]);
   const go = (r) => { onClose(); nav(KIND[r.kind].url(r)); };
   const quick = useMemo(() => [
+    { label: 'Новая задача', to: '/projects?newtask=1', icon: ListTodo },
     { label: 'Новая заявка', to: '/tickets?new=1', icon: Ticket },
     { label: 'Новый проект', to: '/projects?new=1', icon: FolderKanban },
     { label: 'Новый клиент', to: '/clients?new=1', icon: Building2 },

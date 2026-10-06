@@ -38,6 +38,8 @@ body {
 
 .tabular { font-variant-numeric: tabular-nums; }
 
+/* Компонентные классы — в слое components, чтобы утилиты (text-red-600 и т.п.) могли их переопределять */
+@layer components {
 /* Кнопки-пилюли как на макете */
 .chip {
   @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-line bg-panel text-[13px] font-medium text-ink-2
@@ -56,6 +58,8 @@ select.input { @apply pr-8 appearance-none bg-no-repeat;
 
 .th { @apply px-4 py-2.5 text-left text-[12.5px] font-medium text-ink-2 whitespace-nowrap; }
 .td { @apply px-4 py-2.5 text-[13px] text-ink-2 whitespace-nowrap; }
+
+}
 
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideIn { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }

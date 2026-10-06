@@ -2,44 +2,47 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Clock, Calendar } from 'lucide-react';
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
-import { PROJECT_STATUS } from '../lib/constants';
+import { PROJECT_STATUS, TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtHM, fmtHours, parseDate, MONTHS, toDateStr } from '../lib/format';
 import { AvatarStack, Progress, StatusDot, Card, Avatar, cx } from './ui';
 
-/* ---------------- Канбан ---------------- */
-export function ProjectKanban({ projects, userMap, onOpen, onPatch }) {
+/* ---------------- Канбан задач ---------------- */
+export function TaskKanban({ tasks, userMap, onOpen, onPatch }) {
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
+  const today = toDateStr(new Date());
   return (
     <div className="flex gap-3 overflow-x-auto pb-3">
-      {Object.entries(PROJECT_STATUS).map(([status, s]) => {
-        const items = projects.filter((p) => p.status === status);
+      {Object.entries(TASK_STATUS).map(([status, s]) => {
+        const items = tasks.filter((t) => t.status === status);
         return (
           <div key={status}
             onDragOver={(e) => { e.preventDefault(); setOver(status); }}
             onDragLeave={() => setOver(null)}
             onDrop={() => { if (dragId) onPatch(dragId, { status }); setDragId(null); setOver(null); }}
-            className={cx('w-[290px] shrink-0 rounded-2xl border p-2.5 transition-colors', over === status ? 'bg-violet/5 border-violet/30' : 'bg-canvas/70 border-line')}>
+            className={cx('w-[320px] shrink-0 rounded-2xl border p-2.5 transition-colors', over === status ? 'bg-violet/5 border-violet/30' : 'bg-canvas/70 border-line')}>
             <div className="flex items-center justify-between px-1.5 pb-2.5">
               <StatusDot color={s.color} label={<span className="font-medium text-ink">{s.label}</span>} />
               <span className="text-[12px] text-ink-3">{items.length}</span>
             </div>
             <div className="space-y-2 min-h-16">
-              {items.map((p) => (
-                <div key={p.id} draggable onDragStart={() => setDragId(p.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(p.id)}
-                  className={cx('bg-panel rounded-xl border border-line p-3 cursor-pointer hover:shadow-md transition-shadow', dragId === p.id && 'opacity-50')}>
-                  <div className="text-[13.5px] font-medium leading-snug">{p.name}</div>
-                  {p.client_name && <div className="text-[12px] text-ink-3 mt-0.5 truncate">{p.client_name}</div>}
-                  <div className="mt-3"><Progress value={p.progress} width="flex-1" /></div>
-                  <div className="flex items-center justify-between mt-3">
-                    <AvatarStack users={p.member_ids.map((i) => userMap[i]).filter(Boolean)} size={22} />
-                    <div className="flex items-center gap-2.5 text-[11.5px] text-ink-3">
-                      <span className="inline-flex items-center gap-1"><Clock size={12} />{fmtHM(p.tracked_sec)}</span>
-                      {p.due_date && <span className="inline-flex items-center gap-1"><Calendar size={12} />{fmtDate(p.due_date)}</span>}
+              {items.map((t) => {
+                const late = t.status !== 'done' && t.due_date && t.due_date < today;
+                return (
+                  <div key={t.id} draggable onDragStart={() => setDragId(t.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(t.id)}
+                    className={cx('bg-panel rounded-xl border border-line p-3 cursor-pointer hover:shadow-md transition-shadow', dragId === t.id && 'opacity-50')}>
+                    <div className="text-[11.5px] text-ink-3 truncate">{t.project_name}</div>
+                    <div className="text-[13.5px] font-medium leading-snug mt-0.5">{t.title}</div>
+                    {t.description && <div className="text-[12px] text-ink-2 mt-1 line-clamp-2">{t.description}</div>}
+                    <div className="flex items-center justify-between mt-2.5">
+                      <span className="flex items-center gap-1.5 text-[12px] text-ink-2">
+                        {t.assignee_id ? <><Avatar user={userMap[t.assignee_id]} size={20} ring={false} />{userMap[t.assignee_id]?.name.split(' ')[0]}</> : <span className="text-ink-3">Не назначена</span>}
+                      </span>
+                      {t.due_date && <span className={cx('inline-flex items-center gap-1 text-[11.5px]', late ? 'text-red-600 font-medium' : 'text-ink-3')}><Calendar size={12} />{fmtDate(t.due_date)}</span>}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
@@ -156,7 +159,7 @@ export function ProjectGantt({ projects, onOpen }) {
                   </div>
                 );
               }
-              const t = r.t; const s = t.start_date || t.due_date; const e = t.due_date || t.start_date;
+              const t = r.t; const s = t.start_date || toDateStr(parseDate(t.created_at)); const e = t.due_date && t.due_date >= s ? t.due_date : s;
               return (
                 <div key={'t' + t.id} className="h-9 relative border-b border-line bg-canvas/40">
                   {s && <div className="absolute top-2.5 h-4 rounded-full" title={t.title}

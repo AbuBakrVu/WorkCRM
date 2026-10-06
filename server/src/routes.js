@@ -174,6 +174,10 @@ const PROJECT_SELECT = `
   SELECT p.*, c.name client_name, o.name owner_name,
     (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) tasks_total,
     (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') tasks_done,
+    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'in_progress') tasks_in_progress,
+    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'done' AND t.due_date < date('now')) tasks_overdue,
+    (SELECT MAX(created_at) FROM tasks t WHERE t.project_id = p.id) last_task_at,
+    (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.project_id = p.id AND e.started_at >= date('now','-6 days')) week_sec,
     (SELECT COALESCE(SUM(CASE WHEN e.ended_at IS NULL
         THEN CAST((julianday('now') - julianday(e.started_at)) * 86400 AS INTEGER)
         ELSE e.duration_sec END),0) FROM time_entries e WHERE e.project_id = p.id) tracked_sec,
@@ -246,21 +250,31 @@ api.delete('/projects/:id', requireRole('admin', 'manager'), wrap((req) => {
 
 /* ---------- tasks ---------- */
 const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'position'];
-const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name
-  FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id JOIN projects p ON p.id = t.project_id`;
+const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name, cb.name creator_name,
+    (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.task_id = t.id) tracked_sec
+  FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id JOIN projects p ON p.id = t.project_id
+  LEFT JOIN users cb ON cb.id = t.created_by`;
 
 api.get('/tasks', wrap((req) => {
   const where = []; const params = [];
   if (req.query.project_id) { where.push('t.project_id = ?'); params.push(Number(req.query.project_id)); }
   if (req.query.assignee_id) { where.push('t.assignee_id = ?'); params.push(Number(req.query.assignee_id)); }
   if (req.query.open) where.push("t.status != 'done'");
-  return all(`${TASK_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY t.due_date IS NULL, t.due_date, t.id`, ...params);
+  return all(`${TASK_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY t.status = 'done', t.due_date IS NULL, t.due_date, t.id DESC`, ...params);
+}));
+api.get('/tasks/:id', wrap((req) => {
+  const t = get(`${TASK_SELECT} WHERE t.id = ?`, idParam(req));
+  if (!t) throw notFound();
+  return t;
 }));
 api.post('/tasks', wrap((req) => {
   const data = pick(req.body, TASK_FIELDS);
   required(data, 'project_id', 'title');
+  data.created_by = req.user.id;
+  if (data.status === 'done') data.completed_at = nowIso();
   const id = insert('tasks', data);
-  logActivity(req.user.id, 'task', id, 'create', `добавил задачу «${data.title}»`);
+  const pname = get('SELECT name FROM projects WHERE id = ?', data.project_id)?.name;
+  logActivity(req.user.id, 'task', id, 'create', `добавил задачу «${data.title}»${pname ? ` в ${pname}` : ''}`);
   return get(`${TASK_SELECT} WHERE t.id = ?`, id);
 }));
 api.put('/tasks/:id', wrap((req) => {
@@ -268,8 +282,12 @@ api.put('/tasks/:id', wrap((req) => {
   const before = get('SELECT * FROM tasks WHERE id = ?', id);
   if (!before) throw notFound();
   const data = pick(req.body, TASK_FIELDS);
+  if (data.status && data.status !== before.status) {
+    data.completed_at = data.status === 'done' ? nowIso() : null;
+    if (data.status === 'done') logActivity(req.user.id, 'task', id, 'done', `закрыл задачу «${before.title}»`);
+    else if (before.status === 'done') logActivity(req.user.id, 'task', id, 'reopen', `вернул в работу задачу «${before.title}»`);
+  }
   update('tasks', id, data);
-  if (data.status === 'done' && before.status !== 'done') logActivity(req.user.id, 'task', id, 'done', `выполнил задачу «${before.title}»`);
   return get(`${TASK_SELECT} WHERE t.id = ?`, id);
 }));
 api.delete('/tasks/:id', wrap((req) => { run('DELETE FROM tasks WHERE id = ?', idParam(req)); return { ok: true }; }));
@@ -486,6 +504,29 @@ api.get('/dashboard', wrap((req) => {
         SUM(status = 'new') new,
         SUM(status IN ('new','in_progress','waiting') AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')) overdue,
         SUM(resolved_at >= date('now','-6 days')) resolved_week FROM tickets`),
+    tasks: get(`SELECT
+        SUM(status != 'done') open,
+        SUM(status = 'in_progress') in_progress,
+        SUM(status != 'done' AND due_date < date('now')) overdue,
+        SUM(status != 'done' AND due_date BETWEEN date('now') AND date('now','+3 days')) due_soon,
+        SUM(status != 'done' AND assignee_id IS NULL) unassigned,
+        SUM(created_at >= date('now','-6 days')) created_week,
+        SUM(status = 'done' AND completed_at >= date('now','-6 days')) done_week
+      FROM tasks`),
+    tasks_done_by_day: all(`SELECT date(completed_at) day, COUNT(*) n FROM tasks
+        WHERE status = 'done' AND completed_at >= date('now','-13 days') GROUP BY day`),
+    tasks_created_by_day: all(`SELECT date(created_at) day, COUNT(*) n FROM tasks
+        WHERE created_at >= date('now','-13 days') GROUP BY day`),
+    projects_overview: all(`SELECT p.id, p.name, p.status,
+        SUM(t.status = 'todo') todo, SUM(t.status = 'in_progress') in_progress,
+        SUM(t.status != 'done' AND t.due_date < date('now')) overdue,
+        SUM(t.status = 'done') done, COUNT(t.id) total,
+        (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.project_id = p.id AND e.started_at >= date('now','-6 days')) week_sec
+      FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
+      WHERE p.status != 'done' OR t.status != 'done'
+      GROUP BY p.id ORDER BY overdue DESC, (todo + in_progress) DESC, p.name`),
+    attention_tasks: all(`${TASK_SELECT} WHERE t.status != 'done' AND (t.due_date <= date('now','+3 days') OR t.assignee_id IS NULL)
+        ORDER BY t.due_date IS NULL, t.due_date, t.id LIMIT 10`),
     tickets_by_category: all(`SELECT category, COUNT(*) n FROM tickets WHERE created_at >= date('now','-29 days') GROUP BY category ORDER BY n DESC`),
     hours_week: all(`SELECT u.id, u.name, u.color, COALESCE(SUM(e.duration_sec),0) sec FROM users u
         LEFT JOIN time_entries e ON e.user_id = u.id AND e.started_at >= date('now','-6 days')
