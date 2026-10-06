@@ -18,7 +18,7 @@ const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147
 const pickOne = (a) => a[Math.floor(rnd() * a.length)];
 
 tx(() => {
-  if (force) for (const t of ['activity', 'transactions', 'time_entries', 'deals', 'ticket_comments', 'tickets', 'tasks', 'project_members', 'projects', 'clients', 'users'])
+  if (force) for (const t of ['task_comments', 'activity', 'transactions', 'time_entries', 'deals', 'ticket_comments', 'tickets', 'tasks', 'project_members', 'projects', 'clients', 'users'])
     db.exec(`DELETE FROM ${t}; DELETE FROM sqlite_sequence WHERE name='${t}';`);
 
   const pwd = hashPassword('demo12345');
@@ -96,6 +96,26 @@ tx(() => {
     });
     return id;
   });
+
+  // Пара обсуждений в задачах
+  const cm = (taskTitle, items) => {
+    const t = get('SELECT id, created_at FROM tasks WHERE title = ?', taskTitle);
+    if (!t) return;
+    items.forEach(([u, body, kind = 'text'], k) => ins('task_comments', { task_id: t.id, user_id: users[u], kind, body,
+      created_at: new Date(Date.now() - (items.length - k) * 47 * 60e3).toISOString() }));
+  };
+  cm('Проверить кабельные линии корпуса №3', [
+    [1, 'Ахмед, посмотри, пожалуйста, сегодня — с утра снова жалобы из 214 и 216.'],
+    [5, 'взял задачу в работу', 'system'],
+    [5, 'Принял. Буду на месте после обеда, возьму тестер.'],
+    [5, 'Линии 214-03 и 216-01 — обрыв в розетке. Заменил розетки, проверил — всё ок. Остальное завтра.'],
+    [1, 'Отлично, спасибо! Завтра отпишись по остальным.'],
+  ]);
+  cm('VPN между филиалами', [
+    [3, 'Филиал 2 готов, туннель поднят. В филиале 3 роутер старый, WireGuard не поддерживает.'],
+    [1, 'Сколько стоит замена? Согласую с клиентом.'],
+    [3, 'Примерно 9–12 тыс. ₽, скину 2 варианта.'],
+  ]);
 
   const cats = ['network', 'hardware', 'software', 'access', 'printer', 'other'];
   const T = [

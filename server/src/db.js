@@ -173,6 +173,16 @@ const MIGRATIONS = [
     d.exec("UPDATE tasks SET completed_at = created_at WHERE status = 'done' AND completed_at IS NULL");
     d.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, due_date)');
   },
+  // 2. Комментарии к задачам (чат). kind: 'text' — сообщение, 'system' — событие (смена статуса, исполнителя)
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS task_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      kind TEXT NOT NULL DEFAULT 'text' CHECK (kind IN ('text','system')),
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments(task_id, id);`),
 ];
 
 {

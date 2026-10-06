@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Info, Star, MoreHorizontal, List, ChartGantt, Kanban, Clock, Plus, Search, User, X, ChevronDown, ChevronRight,
-  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo,
+  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo, MessageSquare,
 } from 'lucide-react';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
@@ -285,6 +285,9 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                         <td className="td whitespace-normal">
                           <div className={cx('text-[13.5px] font-[450]', t.status === 'done' ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</div>
                           {t.description && <div className="text-[12px] text-ink-3 line-clamp-1 max-w-[560px]">{t.description}</div>}
+                          {t.comments_count > 0 && (
+                            <span className="inline-flex items-center gap-1 mt-0.5 text-[11.5px] text-violet font-medium"><MessageSquare size={12} />{t.comments_count}</span>
+                          )}
                         </td>
                         <td className="td" onClick={(e) => e.stopPropagation()}>
                           <Popover width={180} trigger={({ toggle }) => <button onClick={toggle}><TaskStatusPill status={t.status} /></button>}>

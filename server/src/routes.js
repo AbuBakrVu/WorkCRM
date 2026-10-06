@@ -251,7 +251,9 @@ api.delete('/projects/:id', requireRole('admin', 'manager'), wrap((req) => {
 /* ---------- tasks ---------- */
 const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'position'];
 const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name, cb.name creator_name,
-    (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.task_id = t.id) tracked_sec
+    (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.task_id = t.id) tracked_sec,
+    (SELECT COUNT(*) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') comments_count,
+    (SELECT MAX(id) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') last_comment_id
   FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id JOIN projects p ON p.id = t.project_id
   LEFT JOIN users cb ON cb.id = t.created_by`;
 
@@ -282,6 +284,14 @@ api.put('/tasks/:id', wrap((req) => {
   const before = get('SELECT * FROM tasks WHERE id = ?', id);
   if (!before) throw notFound();
   const data = pick(req.body, TASK_FIELDS);
+  const STATUS_TEXT = { todo: 'вернул задачу в «Открыта»', in_progress: 'взял задачу в работу', done: 'закрыл задачу' };
+  if (data.status && data.status !== before.status) {
+    systemComment(id, req.user.id, STATUS_TEXT[data.status] || `сменил статус на ${data.status}`);
+  }
+  if ('assignee_id' in data && (data.assignee_id ?? null) !== before.assignee_id) {
+    const who = data.assignee_id ? get('SELECT name FROM users WHERE id = ?', data.assignee_id)?.name : null;
+    systemComment(id, req.user.id, who ? `назначил исполнителя: ${who}` : 'снял исполнителя');
+  }
   if (data.status && data.status !== before.status) {
     data.completed_at = data.status === 'done' ? nowIso() : null;
     if (data.status === 'done') logActivity(req.user.id, 'task', id, 'done', `закрыл задачу «${before.title}»`);
@@ -291,6 +301,40 @@ api.put('/tasks/:id', wrap((req) => {
   return get(`${TASK_SELECT} WHERE t.id = ?`, id);
 }));
 api.delete('/tasks/:id', wrap((req) => { run('DELETE FROM tasks WHERE id = ?', idParam(req)); return { ok: true }; }));
+
+/* ---------- комментарии к задачам (чат) ---------- */
+const COMMENT_SELECT = `SELECT c.*, u.name user_name, u.color user_color FROM task_comments c LEFT JOIN users u ON u.id = c.user_id`;
+function systemComment(taskId, userId, body) {
+  run("INSERT INTO task_comments (task_id, user_id, kind, body) VALUES (?, ?, 'system', ?)", taskId, userId, body);
+}
+
+// ?after=<id> — только новые сообщения (для автообновления чата)
+api.get('/tasks/:id/comments', wrap((req) => {
+  const after = Number(req.query.after) || 0;
+  return all(`${COMMENT_SELECT} WHERE c.task_id = ? AND c.id > ? ORDER BY c.id`, idParam(req), after);
+}));
+
+api.post('/tasks/:id/comments', wrap((req) => {
+  const id = idParam(req);
+  const task = get('SELECT id, title FROM tasks WHERE id = ?', id);
+  if (!task) throw notFound();
+  const body = String(req.body?.body || '').trim();
+  if (!body) throw bad('Пустое сообщение');
+  if (body.length > 5000) throw bad('Сообщение слишком длинное (максимум 5000 символов)');
+  const cid = insert('task_comments', { task_id: id, user_id: req.user.id, kind: 'text', body });
+  logActivity(req.user.id, 'task', id, 'comment', `прокомментировал задачу «${task.title}»`);
+  return get(`${COMMENT_SELECT} WHERE c.id = ?`, cid);
+}));
+
+// Удалить своё сообщение (админ/менеджер — любое)
+api.delete('/task-comments/:id', wrap((req) => {
+  const c = get('SELECT * FROM task_comments WHERE id = ?', idParam(req));
+  if (!c) throw notFound();
+  if (c.kind !== 'text') throw bad('Системные события удалить нельзя');
+  if (c.user_id !== req.user.id && !['admin', 'manager'].includes(req.user.role)) throw new HttpError(403, 'Можно удалить только своё сообщение');
+  run('DELETE FROM task_comments WHERE id = ?', c.id);
+  return { ok: true };
+}));
 
 /* ---------- tickets (заявки) ---------- */
 const TICKET_FIELDS = ['title', 'description', 'category', 'priority', 'status', 'location', 'requester', 'requester_contact',
