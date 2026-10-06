@@ -1,0 +1,163 @@
+# CRM — проекты, заявки, клиенты, время, финансы
+
+Собственная CRM для IT-команды: проекты с задачами (таблица / канбан / Гант), заявки на обслуживание с SLA, клиенты и воронка сделок, учёт времени с таймером, доходы/расходы и дашборд.
+
+**Стек:** Node.js 22 + Express + SQLite (встроенный `node:sqlite`) · React 19 + Vite + Tailwind 4 · JWT в httpOnly-cookie.
+Одна база-файл, один процесс, никаких внешних сервисов — легко держать на небольшом VPS.
+
+---
+
+## Модули
+
+| Раздел | Что умеет |
+|---|---|
+| **Дашборд** | KPI, срочные заявки с таймером SLA, мои задачи, доходы/расходы за 6 мес., загрузка команды, воронка, лента активности |
+| **Проекты** | Группировка по сроку (просрочено / этот месяц / следующий / позже), смена статуса в строке, массовые действия, фильтры по сотруднику и статусу, сортировка, скрытие колонок, избранное, экспорт CSV. Виды: **таблица, Гант** (с задачами, масштаб дни/недели/месяцы), **канбан** (drag & drop), **учёт времени** (проект × сотрудник) |
+| **Карточка проекта** | Задачи (статус в один клик, исполнитель, срок), таймер на задачу, время по сотрудникам, бюджет vs. оплаты |
+| **Заявки** | Приоритет → автоматический срок реакции (4/8/24/72 ч), категории, место (корпус/кабинет), заявитель, исполнитель, комментарии, решение; таблица и канбан; вкладка «Просроченные» |
+| **Учёт времени** | Глобальный таймер в шапке (проект / задача / заявка), табель по неделям, записи по дням, ручное добавление, CSV |
+| **Клиенты** | Карточка с проектами, сделками, заявками и платежами |
+| **Воронка сделок** | Канбан по этапам, суммы по этапам, конверсия |
+| **Финансы** | Доходы/расходы с категориями и привязкой к клиенту/проекту, график по месяцам, структура расходов, CSV (видят только админ и менеджер) |
+| **Команда** | Сотрудники, роли, ставка, открытые задачи/заявки, часы за неделю |
+| **Поиск** | `Ctrl/⌘ + K` — по проектам, задачам, заявкам (в т.ч. по номеру), клиентам, сделкам; быстрые действия |
+
+**Роли:** `admin` — всё, включая сотрудников · `manager` — финансы и удаление · `member` — работа с проектами, задачами, заявками, своим временем.
+
+---
+
+## Локальный запуск (разработка)
+
+```bash
+# 1. сервер
+cd server
+npm install
+npm run seed      # демо-данные (необязательно): admin@demo.ru / demo12345
+npm run dev       # http://localhost:3000 — API
+
+# 2. фронтенд (в другом терминале)
+cd client
+npm install
+npm run dev       # http://localhost:5173 — проксирует /api на :3000
+```
+
+Без `seed` при первом входе откроется экран **«Первый запуск»** — создаёте администратора.
+
+---
+
+## Развёртывание на VPS (Docker)
+
+Требуется Docker + docker compose plugin.
+
+```bash
+git clone <ваш-репозиторий> crm && cd crm      # или загрузите архив и распакуйте
+docker compose up -d --build
+docker compose logs -f crm                      # «CRM запущена на http://localhost:3000»
+```
+
+Приложение слушает `127.0.0.1:3000`, база и секрет сессий лежат в `./data` (смонтирован в контейнер как `/data`).
+
+### HTTPS через Caddy (рекомендую)
+
+```bash
+sudo apt install -y caddy
+sudo cp Caddyfile.example /etc/caddy/Caddyfile   # впишите свой домен
+sudo systemctl reload caddy
+```
+
+Caddy сам выпустит и продлит сертификат. В `docker-compose.yml` оставьте `COOKIE_SECURE=true`.
+Если пока работаете по голому IP без HTTPS — поставьте `COOKIE_SECURE=false` и пробросьте порт `3000:3000`, иначе браузер не сохранит cookie входа.
+
+<details>
+<summary>Вариант с nginx</summary>
+
+```nginx
+server {
+    server_name crm.example.ru;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+Затем `certbot --nginx -d crm.example.ru`.
+</details>
+
+### Без Docker (systemd)
+
+```bash
+# Node.js 22.13+ обязателен (нужен встроенный node:sqlite)
+cd client && npm ci && npm run build          # собирает в server/public
+cd ../server && npm ci --omit=dev
+DATA_DIR=/var/lib/crm PORT=3000 COOKIE_SECURE=true npm start
+```
+
+Юнит `/etc/systemd/system/crm.service`:
+```ini
+[Unit]
+Description=CRM
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/crm/server
+Environment=NODE_ENV=production PORT=3000 DATA_DIR=/var/lib/crm COOKIE_SECURE=true
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/index.js
+Restart=always
+User=crm
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+
+## Резервное копирование
+
+Горячая копия без остановки (SQLite `VACUUM INTO`), хранятся последние 14:
+
+```bash
+docker compose exec crm npm run backup          # → data/backups/crm-ГГГГ-ММ-ДД_ЧЧ-ММ.db
+```
+
+Ежедневно в 3:00 (crontab на VPS):
+```
+0 3 * * * cd /opt/crm && docker compose exec -T crm npm run backup >/dev/null 2>&1
+```
+Восстановление: остановить контейнер, заменить `data/crm.db` копией, удалить `data/crm.db-wal` и `data/crm.db-shm`, запустить.
+
+---
+
+## Переменные окружения
+
+| Переменная | По умолчанию | Назначение |
+|---|---|---|
+| `PORT` | `3000` | порт сервера |
+| `DATA_DIR` | `./data` | где лежат `crm.db` и `.jwt_secret` |
+| `JWT_SECRET` | генерируется | секрет подписи сессий (если не задан — создаётся и сохраняется в `DATA_DIR`) |
+| `COOKIE_SECURE` | `false` | `true` за HTTPS |
+
+---
+
+## Структура
+
+```
+server/
+  src/db.js        схема SQLite, индексы, хелперы
+  src/auth.js      JWT, пароли (bcrypt), роли, лимит попыток входа
+  src/routes.js    REST API: /api/projects, /tasks, /tickets, /clients, /deals, /time, /transactions, /dashboard, /search
+  src/seed.js      демо-данные
+  src/backup.js    резервная копия
+client/
+  src/components/  Layout (сайдбар, шапка, таймер, поиск), UI-кит, карточки проекта
+  src/pages/       Дашборд, Проекты, Заявки, Время, Клиенты, Воронка, Финансы, Команда, Настройки
+```
+
+## Что можно добавить дальше
+
+- Уведомления в Telegram (новая заявка, нарушение SLA) — бот + вебхук
+- Приём заявок через публичную форму или почтовый ящик
+- Вложения (фото неисправности) к заявкам
+- Инвентарь оборудования по корпусам с привязкой к заявкам
+- Счета и акты в PDF по клиенту

@@ -1,0 +1,12 @@
+services:
+  crm:
+    build: .
+    container_name: crm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"   # наружу открывает Caddy/nginx
+    environment:
+      - COOKIE_SECURE=true      # false, если пока без HTTPS
+      # - JWT_SECRET=длинная_случайная_строка   # иначе генерируется и хранится в /data
+    volumes:
+      - ./data:/data

@@ -1,0 +1,542 @@
+import { Router } from 'express';
+import { all, get, run, tx, logActivity } from './db.js';
+import {
+  requireAuth, requireRole, issueToken, clearToken, hashPassword, checkPassword,
+  publicUser, loginRateLimit,
+} from './auth.js';
+
+export const api = Router();
+
+/* ---------- helpers ---------- */
+class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+const bad = (msg) => new HttpError(400, msg);
+const notFound = () => new HttpError(404, 'Не найдено');
+
+const wrap = (fn) => (req, res, next) => {
+  try {
+    const out = fn(req, res);
+    if (out !== undefined && !res.headersSent) res.json(out);
+  } catch (e) { next(e); }
+};
+
+// Берём из тела только разрешённые поля; '' → null, boolean → 0/1
+function pick(body, fields) {
+  const out = {};
+  for (const f of fields) {
+    if (!(f in (body || {}))) continue;
+    let v = body[f];
+    if (v === '' || v === undefined) v = null;
+    if (typeof v === 'boolean') v = v ? 1 : 0;
+    if (v !== null && typeof v === 'object') throw bad(`Неверное значение поля ${f}`);
+    out[f] = v;
+  }
+  return out;
+}
+
+function insert(table, data) {
+  const keys = Object.keys(data);
+  const sql = `INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`;
+  return Number(run(sql, ...keys.map((k) => data[k])).lastInsertRowid);
+}
+function update(table, id, data) {
+  const keys = Object.keys(data);
+  if (!keys.length) return;
+  run(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => data[k]), id);
+}
+const idParam = (req) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw bad('Неверный id');
+  return id;
+};
+const required = (data, ...fields) => {
+  for (const f of fields) if (data[f] === null || data[f] === undefined || String(data[f]).trim() === '') throw bad(`Поле «${f}» обязательно`);
+};
+const nowIso = () => new Date().toISOString();
+
+/* ---------- auth ---------- */
+api.get('/health', (req, res) => res.json({ ok: true }));
+
+api.get('/auth/setup', wrap(() => ({ needsSetup: get('SELECT COUNT(*) c FROM users').c === 0 })));
+
+// Первый запуск: создание администратора (работает только при пустой таблице users)
+api.post('/auth/setup', wrap((req, res) => {
+  if (get('SELECT COUNT(*) c FROM users').c > 0) throw new HttpError(403, 'Система уже настроена');
+  const { name, email, password } = req.body || {};
+  if (!name || !email || !password || password.length < 8) throw bad('Укажите имя, email и пароль от 8 символов');
+  const id = insert('users', { name, email, password_hash: hashPassword(password), role: 'admin', color: '#4f46e5', position: 'Администратор' });
+  const user = get('SELECT * FROM users WHERE id = ?', id);
+  issueToken(res, user);
+  return publicUser(user);
+}));
+
+api.post('/auth/login', loginRateLimit, wrap((req, res) => {
+  const { email, password } = req.body || {};
+  const user = email && get('SELECT * FROM users WHERE email = ? AND active = 1', String(email).trim());
+  if (!user || !checkPassword(String(password || ''), user.password_hash)) throw new HttpError(401, 'Неверный email или пароль');
+  issueToken(res, user);
+  return publicUser(user);
+}));
+
+api.post('/auth/logout', wrap((req, res) => { clearToken(res); return { ok: true }; }));
+
+api.use(requireAuth);
+
+api.get('/auth/me', wrap((req) => req.user));
+
+api.put('/auth/me', wrap((req) => {
+  const data = pick(req.body, ['name', 'phone', 'position', 'color']);
+  if (req.body?.new_password) {
+    const u = get('SELECT * FROM users WHERE id = ?', req.user.id);
+    if (!checkPassword(String(req.body.current_password || ''), u.password_hash)) throw bad('Текущий пароль неверен');
+    if (String(req.body.new_password).length < 8) throw bad('Пароль должен быть не короче 8 символов');
+    data.password_hash = hashPassword(String(req.body.new_password));
+  }
+  update('users', req.user.id, data);
+  return publicUser(get('SELECT * FROM users WHERE id = ?', req.user.id));
+}));
+
+/* ---------- users ---------- */
+const USER_FIELDS = ['name', 'email', 'role', 'position', 'phone', 'color', 'hourly_rate', 'active'];
+
+api.get('/users', wrap(() => all(`
+  SELECT u.id, u.name, u.email, u.role, u.position, u.phone, u.color, u.hourly_rate, u.active, u.created_at,
+    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id = u.id AND t.status != 'done') open_tasks,
+    (SELECT COUNT(*) FROM tickets k WHERE k.assignee_id = u.id AND k.status IN ('new','in_progress','waiting')) open_tickets,
+    (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.user_id = u.id AND e.started_at >= date('now','-6 days')) week_sec
+  FROM users u ORDER BY u.active DESC, u.name`)));
+
+api.post('/users', requireRole('admin'), wrap((req) => {
+  const data = pick(req.body, USER_FIELDS);
+  required(data, 'name', 'email');
+  const pwd = String(req.body?.password || '');
+  if (pwd.length < 8) throw bad('Пароль должен быть не короче 8 символов');
+  if (get('SELECT id FROM users WHERE email = ?', data.email)) throw bad('Пользователь с таким email уже есть');
+  data.password_hash = hashPassword(pwd);
+  const id = insert('users', data);
+  logActivity(req.user.id, 'user', id, 'create', `добавил сотрудника «${data.name}»`);
+  return publicUser(get('SELECT * FROM users WHERE id = ?', id));
+}));
+
+api.put('/users/:id', requireRole('admin'), wrap((req) => {
+  const id = idParam(req);
+  const data = pick(req.body, USER_FIELDS);
+  if (req.body?.password) {
+    if (String(req.body.password).length < 8) throw bad('Пароль должен быть не короче 8 символов');
+    data.password_hash = hashPassword(String(req.body.password));
+  }
+  if (id === req.user.id && (data.role && data.role !== 'admin' || data.active === 0)) throw bad('Нельзя понизить или отключить самого себя');
+  update('users', id, data);
+  return publicUser(get('SELECT * FROM users WHERE id = ?', id));
+}));
+
+/* ---------- clients ---------- */
+const CLIENT_FIELDS = ['name', 'type', 'contact_name', 'phone', 'email', 'inn', 'address', 'notes'];
+
+api.get('/clients', wrap(() => all(`
+  SELECT c.*,
+    (SELECT COUNT(*) FROM projects p WHERE p.client_id = c.id) projects_count,
+    (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.status NOT IN ('resolved','closed')) open_tickets,
+    (SELECT COALESCE(SUM(amount),0) FROM deals d WHERE d.client_id = c.id AND d.stage = 'won') won_amount,
+    (SELECT COALESCE(SUM(amount),0) FROM transactions x WHERE x.client_id = c.id AND x.type = 'income') revenue
+  FROM clients c ORDER BY c.name`)));
+
+api.get('/clients/:id', wrap((req) => {
+  const id = idParam(req);
+  const c = get('SELECT * FROM clients WHERE id = ?', id);
+  if (!c) throw notFound();
+  c.projects = all('SELECT id, name, status, due_date FROM projects WHERE client_id = ? ORDER BY created_at DESC', id);
+  c.deals = all('SELECT id, title, amount, stage FROM deals WHERE client_id = ? ORDER BY created_at DESC', id);
+  c.tickets = all('SELECT id, title, status, priority, created_at FROM tickets WHERE client_id = ? ORDER BY created_at DESC LIMIT 20', id);
+  c.transactions = all('SELECT id, type, amount, date, description FROM transactions WHERE client_id = ? ORDER BY date DESC LIMIT 20', id);
+  return c;
+}));
+
+api.post('/clients', wrap((req) => {
+  const data = pick(req.body, CLIENT_FIELDS);
+  required(data, 'name');
+  const id = insert('clients', data);
+  logActivity(req.user.id, 'client', id, 'create', `добавил клиента «${data.name}»`);
+  return get('SELECT * FROM clients WHERE id = ?', id);
+}));
+api.put('/clients/:id', wrap((req) => {
+  const id = idParam(req);
+  update('clients', id, pick(req.body, CLIENT_FIELDS));
+  return get('SELECT * FROM clients WHERE id = ?', id);
+}));
+api.delete('/clients/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM clients WHERE id = ?', idParam(req)); return { ok: true }; }));
+
+/* ---------- projects ---------- */
+const PROJECT_FIELDS = ['name', 'description', 'status', 'client_id', 'owner_id', 'start_date', 'due_date', 'budget', 'manual_progress', 'visible'];
+
+const PROJECT_SELECT = `
+  SELECT p.*, c.name client_name, o.name owner_name,
+    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) tasks_total,
+    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') tasks_done,
+    (SELECT COALESCE(SUM(CASE WHEN e.ended_at IS NULL
+        THEN CAST((julianday('now') - julianday(e.started_at)) * 86400 AS INTEGER)
+        ELSE e.duration_sec END),0) FROM time_entries e WHERE e.project_id = p.id) tracked_sec,
+    (SELECT GROUP_CONCAT(user_id) FROM project_members m WHERE m.project_id = p.id) member_ids
+  FROM projects p
+  LEFT JOIN clients c ON c.id = p.client_id
+  LEFT JOIN users o ON o.id = p.owner_id`;
+
+function shapeProject(p) {
+  if (!p) return p;
+  p.member_ids = p.member_ids ? String(p.member_ids).split(',').map(Number) : [];
+  p.progress = p.manual_progress != null ? p.manual_progress
+    : p.tasks_total ? Math.round((p.tasks_done / p.tasks_total) * 100)
+    : p.status === 'done' ? 100 : 0;
+  return p;
+}
+function setMembers(projectId, ids) {
+  if (!Array.isArray(ids)) return;
+  run('DELETE FROM project_members WHERE project_id = ?', projectId);
+  for (const uid of new Set(ids.map(Number).filter(Boolean))) run('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?,?)', projectId, uid);
+}
+
+api.get('/projects', wrap(() => all(`${PROJECT_SELECT} ORDER BY COALESCE(p.due_date, '9999') , p.id`).map(shapeProject)));
+
+api.get('/projects/:id', wrap((req) => {
+  const id = idParam(req);
+  const p = shapeProject(get(`${PROJECT_SELECT} WHERE p.id = ?`, id));
+  if (!p) throw notFound();
+  p.tasks = all(`SELECT t.*, u.name assignee_name, u.color assignee_color FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
+                 WHERE t.project_id = ? ORDER BY t.status = 'done', t.position, t.id`, id);
+  p.time_by_user = all(`SELECT u.id, u.name, u.color, SUM(e.duration_sec) sec FROM time_entries e JOIN users u ON u.id = e.user_id
+                        WHERE e.project_id = ? GROUP BY u.id ORDER BY sec DESC`, id);
+  p.finance = get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) income,
+                          COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) expense
+                   FROM transactions WHERE project_id = ?`, id);
+  return p;
+}));
+
+api.post('/projects', wrap((req) => {
+  const data = pick(req.body, PROJECT_FIELDS);
+  required(data, 'name');
+  data.owner_id ??= req.user.id;
+  const id = tx(() => {
+    const id = insert('projects', data);
+    setMembers(id, req.body.member_ids || [req.user.id]);
+    return id;
+  });
+  logActivity(req.user.id, 'project', id, 'create', `создал проект «${data.name}»`);
+  return shapeProject(get(`${PROJECT_SELECT} WHERE p.id = ?`, id));
+}));
+
+api.put('/projects/:id', wrap((req) => {
+  const id = idParam(req);
+  const before = get('SELECT * FROM projects WHERE id = ?', id);
+  if (!before) throw notFound();
+  const data = pick(req.body, PROJECT_FIELDS);
+  tx(() => { update('projects', id, data); setMembers(id, req.body.member_ids); });
+  if (data.status && data.status !== before.status)
+    logActivity(req.user.id, 'project', id, 'status', `перевёл «${before.name}» в статус ${data.status}`);
+  return shapeProject(get(`${PROJECT_SELECT} WHERE p.id = ?`, id));
+}));
+
+api.delete('/projects/:id', requireRole('admin', 'manager'), wrap((req) => {
+  const id = idParam(req);
+  const p = get('SELECT name FROM projects WHERE id = ?', id);
+  run('DELETE FROM projects WHERE id = ?', id);
+  if (p) logActivity(req.user.id, 'project', id, 'delete', `удалил проект «${p.name}»`);
+  return { ok: true };
+}));
+
+/* ---------- tasks ---------- */
+const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'position'];
+const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name
+  FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id JOIN projects p ON p.id = t.project_id`;
+
+api.get('/tasks', wrap((req) => {
+  const where = []; const params = [];
+  if (req.query.project_id) { where.push('t.project_id = ?'); params.push(Number(req.query.project_id)); }
+  if (req.query.assignee_id) { where.push('t.assignee_id = ?'); params.push(Number(req.query.assignee_id)); }
+  if (req.query.open) where.push("t.status != 'done'");
+  return all(`${TASK_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY t.due_date IS NULL, t.due_date, t.id`, ...params);
+}));
+api.post('/tasks', wrap((req) => {
+  const data = pick(req.body, TASK_FIELDS);
+  required(data, 'project_id', 'title');
+  const id = insert('tasks', data);
+  logActivity(req.user.id, 'task', id, 'create', `добавил задачу «${data.title}»`);
+  return get(`${TASK_SELECT} WHERE t.id = ?`, id);
+}));
+api.put('/tasks/:id', wrap((req) => {
+  const id = idParam(req);
+  const before = get('SELECT * FROM tasks WHERE id = ?', id);
+  if (!before) throw notFound();
+  const data = pick(req.body, TASK_FIELDS);
+  update('tasks', id, data);
+  if (data.status === 'done' && before.status !== 'done') logActivity(req.user.id, 'task', id, 'done', `выполнил задачу «${before.title}»`);
+  return get(`${TASK_SELECT} WHERE t.id = ?`, id);
+}));
+api.delete('/tasks/:id', wrap((req) => { run('DELETE FROM tasks WHERE id = ?', idParam(req)); return { ok: true }; }));
+
+/* ---------- tickets (заявки) ---------- */
+const TICKET_FIELDS = ['title', 'description', 'category', 'priority', 'status', 'location', 'requester', 'requester_contact',
+  'client_id', 'project_id', 'assignee_id', 'due_at', 'resolution'];
+const TICKET_SELECT = `SELECT k.*, u.name assignee_name, u.color assignee_color, c.name client_name, p.name project_name,
+    (SELECT COUNT(*) FROM ticket_comments m WHERE m.ticket_id = k.id) comments_count,
+    (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.ticket_id = k.id) tracked_sec
+  FROM tickets k LEFT JOIN users u ON u.id = k.assignee_id LEFT JOIN clients c ON c.id = k.client_id LEFT JOIN projects p ON p.id = k.project_id`;
+const SLA_HOURS = { critical: 4, high: 8, normal: 24, low: 72 };
+
+api.get('/tickets', wrap(() => all(`${TICKET_SELECT} ORDER BY
+  CASE k.status WHEN 'new' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'waiting' THEN 2 WHEN 'resolved' THEN 3 ELSE 4 END,
+  CASE k.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END, k.created_at DESC`)));
+
+api.get('/tickets/:id', wrap((req) => {
+  const id = idParam(req);
+  const t = get(`${TICKET_SELECT} WHERE k.id = ?`, id);
+  if (!t) throw notFound();
+  t.comments = all(`SELECT m.*, u.name user_name, u.color user_color FROM ticket_comments m LEFT JOIN users u ON u.id = m.user_id
+                    WHERE m.ticket_id = ? ORDER BY m.created_at`, id);
+  return t;
+}));
+
+api.post('/tickets', wrap((req) => {
+  const data = pick(req.body, TICKET_FIELDS);
+  required(data, 'title');
+  data.priority ||= 'normal';
+  if (!data.due_at) data.due_at = new Date(Date.now() + (SLA_HOURS[data.priority] || 24) * 3600e3).toISOString();
+  data.created_by = req.user.id;
+  const id = insert('tickets', data);
+  logActivity(req.user.id, 'ticket', id, 'create', `создал заявку #${id} «${data.title}»`);
+  return get(`${TICKET_SELECT} WHERE k.id = ?`, id);
+}));
+
+api.put('/tickets/:id', wrap((req) => {
+  const id = idParam(req);
+  const before = get('SELECT * FROM tickets WHERE id = ?', id);
+  if (!before) throw notFound();
+  const data = pick(req.body, TICKET_FIELDS);
+  if (data.status && data.status !== before.status) {
+    if (['resolved', 'closed'].includes(data.status) && !before.resolved_at) data.resolved_at = nowIso();
+    if (['new', 'in_progress', 'waiting'].includes(data.status)) data.resolved_at = null;
+    logActivity(req.user.id, 'ticket', id, 'status', `изменил статус заявки #${id} → ${data.status}`);
+  }
+  update('tickets', id, data);
+  return get(`${TICKET_SELECT} WHERE k.id = ?`, id);
+}));
+
+api.post('/tickets/:id/comments', wrap((req) => {
+  const id = idParam(req);
+  const body = String(req.body?.body || '').trim();
+  if (!body) throw bad('Пустой комментарий');
+  insert('ticket_comments', { ticket_id: id, user_id: req.user.id, body });
+  return all(`SELECT m.*, u.name user_name, u.color user_color FROM ticket_comments m LEFT JOIN users u ON u.id = m.user_id
+              WHERE m.ticket_id = ? ORDER BY m.created_at`, id);
+}));
+api.delete('/tickets/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM tickets WHERE id = ?', idParam(req)); return { ok: true }; }));
+
+/* ---------- deals (воронка) ---------- */
+const DEAL_FIELDS = ['title', 'client_id', 'amount', 'stage', 'owner_id', 'expected_close', 'notes', 'position'];
+const DEAL_SELECT = `SELECT d.*, c.name client_name, u.name owner_name, u.color owner_color
+  FROM deals d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN users u ON u.id = d.owner_id`;
+
+api.get('/deals', wrap(() => all(`${DEAL_SELECT} ORDER BY d.position, d.created_at DESC`)));
+api.post('/deals', wrap((req) => {
+  const data = pick(req.body, DEAL_FIELDS);
+  required(data, 'title');
+  data.owner_id ??= req.user.id;
+  const id = insert('deals', data);
+  logActivity(req.user.id, 'deal', id, 'create', `создал сделку «${data.title}»`);
+  return get(`${DEAL_SELECT} WHERE d.id = ?`, id);
+}));
+api.put('/deals/:id', wrap((req) => {
+  const id = idParam(req);
+  const before = get('SELECT * FROM deals WHERE id = ?', id);
+  if (!before) throw notFound();
+  const data = pick(req.body, DEAL_FIELDS);
+  update('deals', id, data);
+  if (data.stage && data.stage !== before.stage) logActivity(req.user.id, 'deal', id, 'stage', `перевёл сделку «${before.title}» на этап ${data.stage}`);
+  return get(`${DEAL_SELECT} WHERE d.id = ?`, id);
+}));
+api.delete('/deals/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM deals WHERE id = ?', idParam(req)); return { ok: true }; }));
+
+/* ---------- time tracking ---------- */
+const TIME_SELECT = `SELECT e.*, u.name user_name, u.color user_color, p.name project_name, t.title task_title, k.title ticket_title,
+    CASE WHEN e.ended_at IS NULL THEN CAST((julianday('now') - julianday(e.started_at)) * 86400 AS INTEGER) ELSE e.duration_sec END live_sec
+  FROM time_entries e JOIN users u ON u.id = e.user_id LEFT JOIN projects p ON p.id = e.project_id
+  LEFT JOIN tasks t ON t.id = e.task_id LEFT JOIN tickets k ON k.id = e.ticket_id`;
+
+function stopRunning(userId) {
+  const r = get('SELECT * FROM time_entries WHERE user_id = ? AND ended_at IS NULL', userId);
+  if (!r) return null;
+  const end = new Date();
+  const dur = Math.max(0, Math.round((end - new Date(r.started_at)) / 1000));
+  run('UPDATE time_entries SET ended_at = ?, duration_sec = ? WHERE id = ?', end.toISOString(), dur, r.id);
+  return r.id;
+}
+
+api.get('/time', wrap((req) => {
+  const where = []; const params = [];
+  const from = req.query.from, to = req.query.to;
+  if (from) { where.push('e.started_at >= ?'); params.push(from); }
+  if (to) { where.push('e.started_at < ?'); params.push(to); }
+  if (req.query.user_id) { where.push('e.user_id = ?'); params.push(Number(req.query.user_id)); }
+  if (req.query.project_id) { where.push('e.project_id = ?'); params.push(Number(req.query.project_id)); }
+  return all(`${TIME_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY e.started_at DESC LIMIT 1000`, ...params);
+}));
+
+api.get('/time/running', wrap((req) => get(`${TIME_SELECT} WHERE e.user_id = ? AND e.ended_at IS NULL`, req.user.id) || null));
+
+api.post('/time/start', wrap((req) => {
+  const data = pick(req.body, ['project_id', 'task_id', 'ticket_id', 'description']);
+  if (data.task_id && !data.project_id) data.project_id = get('SELECT project_id FROM tasks WHERE id = ?', data.task_id)?.project_id ?? null;
+  if (data.ticket_id && !data.project_id) data.project_id = get('SELECT project_id FROM tickets WHERE id = ?', data.ticket_id)?.project_id ?? null;
+  const id = tx(() => {
+    stopRunning(req.user.id);
+    return insert('time_entries', { ...data, user_id: req.user.id, started_at: nowIso() });
+  });
+  return get(`${TIME_SELECT} WHERE e.id = ?`, id);
+}));
+
+api.post('/time/stop', wrap((req) => {
+  const id = stopRunning(req.user.id);
+  return id ? get(`${TIME_SELECT} WHERE e.id = ?`, id) : null;
+}));
+
+// Ручное добавление записи
+api.post('/time', wrap((req) => {
+  const data = pick(req.body, ['project_id', 'task_id', 'ticket_id', 'description', 'started_at', 'duration_sec', 'user_id']);
+  required(data, 'started_at', 'duration_sec');
+  if (data.user_id && data.user_id !== req.user.id && req.user.role === 'member') throw new HttpError(403, 'Нельзя добавлять время за других');
+  data.user_id ||= req.user.id;
+  data.duration_sec = Math.max(0, Math.round(Number(data.duration_sec)));
+  const start = new Date(data.started_at);
+  if (isNaN(start)) throw bad('Неверная дата');
+  data.started_at = start.toISOString();
+  data.ended_at = new Date(start.getTime() + data.duration_sec * 1000).toISOString();
+  const id = insert('time_entries', data);
+  return get(`${TIME_SELECT} WHERE e.id = ?`, id);
+}));
+
+api.put('/time/:id', wrap((req) => {
+  const id = idParam(req);
+  const e = get('SELECT * FROM time_entries WHERE id = ?', id);
+  if (!e) throw notFound();
+  if (e.user_id !== req.user.id && req.user.role === 'member') throw new HttpError(403, 'Недостаточно прав');
+  const data = pick(req.body, ['project_id', 'task_id', 'ticket_id', 'description', 'duration_sec']);
+  if (data.duration_sec != null && e.ended_at) {
+    data.duration_sec = Math.max(0, Math.round(Number(data.duration_sec)));
+    data.ended_at = new Date(new Date(e.started_at).getTime() + data.duration_sec * 1000).toISOString();
+  } else delete data.duration_sec;
+  update('time_entries', id, data);
+  return get(`${TIME_SELECT} WHERE e.id = ?`, id);
+}));
+
+api.delete('/time/:id', wrap((req) => {
+  const id = idParam(req);
+  const e = get('SELECT * FROM time_entries WHERE id = ?', id);
+  if (e && e.user_id !== req.user.id && req.user.role === 'member') throw new HttpError(403, 'Недостаточно прав');
+  run('DELETE FROM time_entries WHERE id = ?', id);
+  return { ok: true };
+}));
+
+/* ---------- finance ---------- */
+const TX_FIELDS = ['type', 'amount', 'category', 'date', 'description', 'project_id', 'client_id'];
+const TX_SELECT = `SELECT x.*, p.name project_name, c.name client_name FROM transactions x
+  LEFT JOIN projects p ON p.id = x.project_id LEFT JOIN clients c ON c.id = x.client_id`;
+const finance = Router();
+finance.use(requireRole('admin', 'manager'));
+
+finance.get('/', wrap((req) => {
+  const where = []; const params = [];
+  if (req.query.from) { where.push('x.date >= ?'); params.push(req.query.from); }
+  if (req.query.to) { where.push('x.date <= ?'); params.push(req.query.to); }
+  return all(`${TX_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY x.date DESC, x.id DESC`, ...params);
+}));
+finance.get('/summary', wrap(() => ({
+  months: all(`SELECT strftime('%Y-%m', date) month,
+      SUM(CASE WHEN type='income' THEN amount ELSE 0 END) income,
+      SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) expense
+    FROM transactions WHERE date >= date('now','start of month','-11 months') GROUP BY month ORDER BY month`),
+  categories: all(`SELECT type, COALESCE(category,'Без категории') category, SUM(amount) total FROM transactions
+    WHERE date >= date('now','start of month','-2 months') GROUP BY type, category ORDER BY total DESC`),
+})));
+finance.post('/', wrap((req) => {
+  const data = pick(req.body, TX_FIELDS);
+  required(data, 'type', 'amount', 'date');
+  data.created_by = req.user.id;
+  const id = insert('transactions', data);
+  logActivity(req.user.id, 'transaction', id, 'create', `${data.type === 'income' ? 'добавил доход' : 'добавил расход'} ${data.amount} ₽`);
+  return get(`${TX_SELECT} WHERE x.id = ?`, id);
+}));
+finance.put('/:id', wrap((req) => {
+  const id = idParam(req);
+  update('transactions', id, pick(req.body, TX_FIELDS));
+  return get(`${TX_SELECT} WHERE x.id = ?`, id);
+}));
+finance.delete('/:id', wrap((req) => { run('DELETE FROM transactions WHERE id = ?', idParam(req)); return { ok: true }; }));
+api.use('/transactions', finance);
+
+/* ---------- dashboard ---------- */
+api.get('/dashboard', wrap((req) => {
+  const canFinance = ['admin', 'manager'].includes(req.user.role);
+  const monthStart = new Date(); monthStart.setDate(1);
+  return {
+    projects: get(`SELECT COUNT(*) total,
+        SUM(status IN ('planned','in_progress','in_review')) active,
+        SUM(status = 'stuck') stuck,
+        SUM(status != 'done' AND due_date < date('now')) overdue FROM projects`),
+    tickets: get(`SELECT SUM(status IN ('new','in_progress','waiting')) open,
+        SUM(status = 'new') new,
+        SUM(status IN ('new','in_progress','waiting') AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')) overdue,
+        SUM(resolved_at >= date('now','-6 days')) resolved_week FROM tickets`),
+    tickets_by_category: all(`SELECT category, COUNT(*) n FROM tickets WHERE created_at >= date('now','-29 days') GROUP BY category ORDER BY n DESC`),
+    hours_week: all(`SELECT u.id, u.name, u.color, COALESCE(SUM(e.duration_sec),0) sec FROM users u
+        LEFT JOIN time_entries e ON e.user_id = u.id AND e.started_at >= date('now','-6 days')
+        WHERE u.active = 1 GROUP BY u.id ORDER BY sec DESC`),
+    hours_by_day: all(`SELECT date(started_at) day, SUM(duration_sec) sec FROM time_entries
+        WHERE started_at >= date('now','-13 days') GROUP BY day ORDER BY day`),
+    pipeline: all(`SELECT stage, COUNT(*) n, COALESCE(SUM(amount),0) amount FROM deals GROUP BY stage`),
+    finance: canFinance ? {
+      month: get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) income,
+                         COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) expense
+                  FROM transactions WHERE date >= date('now','start of month')`),
+      prev: get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) income,
+                        COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) expense
+                 FROM transactions WHERE date >= date('now','start of month','-1 month') AND date < date('now','start of month')`),
+      months: all(`SELECT strftime('%Y-%m', date) month,
+          SUM(CASE WHEN type='income' THEN amount ELSE 0 END) income,
+          SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) expense
+        FROM transactions WHERE date >= date('now','start of month','-5 months') GROUP BY month ORDER BY month`),
+    } : null,
+    my_tasks: all(`${TASK_SELECT} WHERE t.assignee_id = ? AND t.status != 'done' ORDER BY t.due_date IS NULL, t.due_date LIMIT 8`, req.user.id),
+    urgent_tickets: all(`${TICKET_SELECT} WHERE k.status IN ('new','in_progress','waiting')
+        ORDER BY CASE k.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END, k.due_at LIMIT 6`),
+    activity: all(`SELECT a.*, u.name user_name, u.color user_color FROM activity a LEFT JOIN users u ON u.id = a.user_id
+        ORDER BY a.created_at DESC, a.id DESC LIMIT 12`),
+  };
+}));
+
+api.get('/activity', wrap(() => all(`SELECT a.*, u.name user_name, u.color user_color FROM activity a LEFT JOIN users u ON u.id = a.user_id
+  ORDER BY a.created_at DESC, a.id DESC LIMIT 100`)));
+
+/* ---------- global search ---------- */
+api.get('/search', wrap((req) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return [];
+  const like = `%${q.toLowerCase()}%`;
+  const num = Number(q.replace('#', ''));
+  return [
+    ...all(`SELECT 'project' kind, id, name title, status sub FROM projects WHERE ulower(name) LIKE ? OR ulower(description) LIKE ? LIMIT 6`, like, like),
+    ...all(`SELECT 'ticket' kind, id, title, status sub FROM tickets WHERE ulower(title) LIKE ? OR ulower(location) LIKE ? OR ulower(requester) LIKE ? OR id = ? LIMIT 6`, like, like, like, Number.isInteger(num) ? num : -1),
+    ...all(`SELECT 'client' kind, id, name title, contact_name sub FROM clients WHERE ulower(name) LIKE ? OR ulower(contact_name) LIKE ? OR ulower(phone) LIKE ? OR ulower(email) LIKE ? LIMIT 6`, like, like, like, like),
+    ...all(`SELECT 'deal' kind, id, title, stage sub FROM deals WHERE ulower(title) LIKE ? LIMIT 4`, like),
+    ...all(`SELECT 'task' kind, t.id, t.title, p.name sub, t.project_id FROM tasks t JOIN projects p ON p.id = t.project_id WHERE ulower(t.title) LIKE ? LIMIT 6`, like),
+  ];
+}));
+
+/* ---------- errors ---------- */
+api.use((req, res) => res.status(404).json({ error: 'Маршрут не найден' }));
+api.use((err, req, res, _next) => {
+  if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+  const msg = String(err?.message || err);
+  if (msg.includes('CHECK constraint')) return res.status(400).json({ error: 'Недопустимое значение поля' });
+  if (msg.includes('FOREIGN KEY')) return res.status(400).json({ error: 'Связанная запись не найдена' });
+  if (msg.includes('UNIQUE')) return res.status(400).json({ error: 'Такая запись уже существует' });
+  console.error(err);
+  res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+});

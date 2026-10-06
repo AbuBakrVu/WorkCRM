@@ -1,0 +1,6 @@
+# Замените crm.example.ru на свой домен (A-запись должна смотреть на VPS).
+# Caddy сам получит и будет продлевать сертификат Let's Encrypt.
+crm.example.ru {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:3000
+}

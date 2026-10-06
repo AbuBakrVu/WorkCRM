@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-canvas: #f6f7f9;
+  --color-panel: #ffffff;
+  --color-side: #fbfbfc;
+  --color-line: #eceef2;
+  --color-line-strong: #e2e5ea;
+  --color-ink: #1f2430;
+  --color-ink-2: #4b5262;
+  --color-ink-3: #8a91a0;
+  --color-brand: #8ee07b;
+  --color-brand-strong: #6fcf5a;
+  --color-brand-ink: #173f12;
+  --color-violet: #6d5ef6;
+  --color-st-done: #7fd093;
+  --color-st-progress: #f3c35f;
+  --color-st-stuck: #e8706f;
+  --color-st-review: #9cc6f5;
+  --color-st-planned: #c7cbd4;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Тонкие скроллбары */
+* { scrollbar-width: thin; scrollbar-color: #d6d9df transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #d6d9df; border-radius: 8px; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Кнопки-пилюли как на макете */
+.chip {
+  @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-line bg-panel text-[13px] font-medium text-ink-2
+         hover:bg-canvas hover:text-ink transition-colors whitespace-nowrap;
+}
+.chip-active { @apply border-ink/15 bg-canvas text-ink; }
+
+.input {
+  @apply w-full h-9 px-3 rounded-lg border border-line-strong bg-panel text-[13px] text-ink outline-none
+         focus:border-violet/60 focus:ring-3 focus:ring-violet/10 placeholder:text-ink-3;
+}
+textarea.input { @apply h-auto py-2 min-h-20; }
+select.input { @apply pr-8 appearance-none bg-no-repeat;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a91a0' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 10px center; }
+
+.th { @apply px-4 py-2.5 text-left text-[12.5px] font-medium text-ink-2 whitespace-nowrap; }
+.td { @apply px-4 py-2.5 text-[13px] text-ink-2 whitespace-nowrap; }
+
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideIn { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes popIn { from { transform: translateY(6px) scale(.98); opacity: 0 } to { transform: none; opacity: 1 } }
+.anim-fade { animation: fadeIn .15s ease-out; }
+.anim-slide { animation: slideIn .2s ease-out; }
+.anim-pop { animation: popIn .16s ease-out; }

@@ -1,0 +1,7 @@
+node_modules/
+server/public/
+server/data/
+data/
+.env
+dev-data/
+server/dev-data/
