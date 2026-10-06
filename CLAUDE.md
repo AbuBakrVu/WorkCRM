@@ -3,29 +3,38 @@
 Рабочая CRM IT-команды: проекты = обслуживаемые организации (Минфин, СДЭК, университет…), внутри — задачи (название + описание обязательны), фильтр задач по статусу; канбан, Гант, IT-заявки с SLA, клиенты и воронка сделок, учёт времени, финансы, дашборд.
 Интерфейс и все тексты — **на русском**. Общение с владельцем — на русском, кратко и по делу.
 
-## ВАЖНО: это боевой сервер
-- Приложение работает в Docker (`docker compose`), данные — в `./data/crm.db` (SQLite). **Никогда не удаляй и не перезаписывай `./data`**, не запускай `npm run seed -- --force` здесь.
-- Перед любой правкой схемы БД или массовыми изменениями — резервная копия: `docker compose exec -T crm npm run backup`.
-- Изменения выкатываются только через `./deploy.sh` (бэкап → сборка → перезапуск → проверка health). Если health не прошёл — смотри `docker compose logs --tail=100 crm` и откатывай: `git checkout <прошлый коммит> && ./deploy.sh`.
-- Каждое законченное изменение — отдельный git-коммит с понятным сообщением на русском.
+## Как устроена работа
+- Claude Code работает **на компьютере владельца** (локальная копия репозитория). Боевой сервер (https://crm.bakr.pro) здесь недоступен и не трогается.
+- Порядок: правка → проверка локально → коммит → `git push` в `main`. Владелец сам обновляет сервер (`git pull && ./deploy.sh` на VPS) и проверяет.
+- **Не запускай** `./deploy.sh`, `./install.sh`, `docker compose` — это команды для сервера.
+- Каждое законченное изменение — отдельный коммит с понятным сообщением на русском. Перед `git push` покажи владельцу, что изменилось (кратко, списком), и пушь после его «ок», если он не просил пушить сразу.
+- Перед работой: `git pull`, чтобы не разойтись с GitHub.
+- Схема БД на сервере обновляется сама при запуске (миграции в `server/src/db.js`), поэтому любые изменения структуры — только новой миграцией (см. ниже). Данные на сервере терять нельзя.
+
+## Проверка перед пушем
+1. `cd client && npm run build` — без ошибок.
+2. Сервер стартует на тестовой базе (`server/dev-data`) и `curl localhost:3001/api/health` отвечает `{"ok":true}`.
+3. Затронутый сценарий проверен (в браузере на http://localhost:5173 или через curl по API).
 
 ## Стек
 - `server/` — Node.js 22 (ESM), Express 5, встроенный `node:sqlite` (`DatabaseSync`), JWT в httpOnly-cookie, bcryptjs. Без ORM.
 - `client/` — React 19 + Vite + Tailwind 4, react-router, lucide-react (иконки), recharts (графики). Сборка кладётся в `server/public`.
 
-## Команды
+## Команды (локально)
 ```bash
-# разработка (горячая перезагрузка), НЕ трогает боевой контейнер:
-cd server && DATA_DIR=./dev-data PORT=3001 npm run dev      # API на :3001 с отдельной тестовой базой
-cd server && DATA_DIR=./dev-data npm run seed                 # демо-данные в тестовую базу
-cd client && VITE_API=http://localhost:3001 npm run dev       # UI на :5173 (прокси /api → VITE_API)
-cd client && npm run build                                    # проверка, что фронт собирается
+# первый запуск
+cd server && npm install && DATA_DIR=./dev-data npm run seed   # тестовая база с демо-данными (admin@demo.ru / demo12345)
+cd client && npm install
 
-./install.sh                                                  # первичная установка / сброс пароля админа (интерактивно — запускает владелец)
-./deploy.sh                                                   # выкатить на прод
-docker compose logs -f crm                                    # логи прода
-docker compose exec -T crm npm run backup                     # бэкап прода
+# разработка (горячая перезагрузка) — два процесса
+cd server && DATA_DIR=./dev-data PORT=3001 npm run dev          # API на :3001
+cd client && VITE_API=http://localhost:3001 npm run dev         # UI на http://localhost:5173
+
+cd client && npm run build                                      # проверка сборки
+cd server && DATA_DIR=./dev-data npm run seed -- --force        # пересоздать тестовую базу
 ```
+
+На сервере (делает владелец, не Claude Code): `cd /opt/crm && git pull && ./deploy.sh`.
 
 ## Устройство кода
 - `server/src/db.js` — базовая схема v0 (CREATE TABLE IF NOT EXISTS — **не менять**) + **миграции** (массив `MIGRATIONS`, версия в `PRAGMA user_version`).
@@ -41,8 +50,3 @@ docker compose exec -T crm npm run backup                     # бэкап пр�
 - Дизайн: светлый, белые карточки `rounded-2xl border-line`, кнопки-«пилюли» (`.chip`), акцент — зелёный `brand` (главные действия) и фиолетовый `violet` (таймер, фокус). Токены цветов — в `client/src/index.css` (`@theme`).
 - Даты в БД: дни — `YYYY-MM-DD`, моменты времени — ISO UTC. На клиенте форматируй через `format.js`, «сегодня» — `todayStr()`, не `toISOString().slice(0,10)` (сдвиг часового пояса, сервер в UTC, пользователи в МСК).
 - Деньги — рубли, `fmtMoney` / `fmtMoneyShort`.
-
-## Проверка перед деплоем
-1. `cd client && npm run build` — без ошибок.
-2. Сервер стартует на тестовой базе и `curl localhost:3001/api/health` отвечает `{"ok":true}`.
-3. Затронутый сценарий проверен руками (или через curl по API).
