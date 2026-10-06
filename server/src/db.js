@@ -6,6 +6,8 @@ const DATA_DIR = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new DatabaseSync(path.join(DATA_DIR, 'crm.db'));
+export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 // Регистронезависимый поиск по кириллице (встроенный LIKE понимает только ASCII)
 db.function('ulower', { deterministic: true }, (s) => (s == null ? null : String(s).toLowerCase()));
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
@@ -183,6 +185,21 @@ const MIGRATIONS = [
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments(task_id, id);`),
+  // 3. Файлы в задачах (вложения в чате). Сами файлы лежат в DATA_DIR/uploads
+  (d) => {
+    d.exec(`CREATE TABLE IF NOT EXISTS files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      size INTEGER NOT NULL DEFAULT 0,
+      mime TEXT,
+      stored TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_files_task ON files(task_id);`);
+    addColumn(d, 'task_comments', 'file_id', 'INTEGER REFERENCES files(id) ON DELETE SET NULL');
+  },
 ];
 
 {

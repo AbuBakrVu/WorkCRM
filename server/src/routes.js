@@ -1,5 +1,8 @@
-import { Router } from 'express';
-import { all, get, run, tx, logActivity } from './db.js';
+import express, { Router } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { all, get, run, tx, logActivity, UPLOAD_DIR } from './db.js';
 import {
   requireAuth, requireRole, issueToken, clearToken, hashPassword, checkPassword,
   publicUser, loginRateLimit,
@@ -300,10 +303,17 @@ api.put('/tasks/:id', wrap((req) => {
   update('tasks', id, data);
   return get(`${TASK_SELECT} WHERE t.id = ?`, id);
 }));
-api.delete('/tasks/:id', wrap((req) => { run('DELETE FROM tasks WHERE id = ?', idParam(req)); return { ok: true }; }));
+api.delete('/tasks/:id', wrap((req) => {
+  const id = idParam(req);
+  const files = all('SELECT stored FROM files WHERE task_id = ?', id);
+  run('DELETE FROM tasks WHERE id = ?', id);
+  files.forEach((f) => removeStored(f.stored));
+  return { ok: true };
+}));
 
 /* ---------- комментарии к задачам (чат) ---------- */
-const COMMENT_SELECT = `SELECT c.*, u.name user_name, u.color user_color FROM task_comments c LEFT JOIN users u ON u.id = c.user_id`;
+const COMMENT_SELECT = `SELECT c.*, u.name user_name, u.color user_color, f.name file_name, f.size file_size, f.mime file_mime
+  FROM task_comments c LEFT JOIN users u ON u.id = c.user_id LEFT JOIN files f ON f.id = c.file_id`;
 function systemComment(taskId, userId, body) {
   run("INSERT INTO task_comments (task_id, user_id, kind, body) VALUES (?, ?, 'system', ?)", taskId, userId, body);
 }
@@ -333,8 +343,58 @@ api.delete('/task-comments/:id', wrap((req) => {
   if (c.kind !== 'text') throw bad('Системные события удалить нельзя');
   if (c.user_id !== req.user.id && !['admin', 'manager'].includes(req.user.role)) throw new HttpError(403, 'Можно удалить только своё сообщение');
   run('DELETE FROM task_comments WHERE id = ?', c.id);
+  if (c.file_id) {
+    const f = get('SELECT stored FROM files WHERE id = ?', c.file_id);
+    run('DELETE FROM files WHERE id = ?', c.file_id);
+    if (f) removeStored(f.stored);
+  }
   return { ok: true };
 }));
+
+/* ---------- файлы задач ---------- */
+const MAX_FILE = 25 * 1024 * 1024;
+function removeStored(stored) {
+  try { fs.unlinkSync(path.join(UPLOAD_DIR, path.basename(stored))); } catch { /* уже удалён */ }
+}
+
+// Загрузка: тело запроса — сам файл (application/octet-stream), имя — в заголовке X-File-Name (encodeURIComponent)
+api.post('/tasks/:id/files', express.raw({ type: 'application/octet-stream', limit: MAX_FILE }), wrap((req) => {
+  const id = idParam(req);
+  const task = get('SELECT id, title FROM tasks WHERE id = ?', id);
+  if (!task) throw notFound();
+  if (!Buffer.isBuffer(req.body) || !req.body.length) throw bad('Пустой файл');
+  let name = 'файл';
+  try { name = decodeURIComponent(String(req.get('X-File-Name') || 'файл')); } catch { /* оставляем по умолчанию */ }
+  name = path.basename(name).replace(/[\x00-\x1f]/g, '').slice(0, 200) || 'файл';
+  const mime = String(req.get('X-File-Type') || '').slice(0, 100) || null;
+  const stored = `${crypto.randomUUID()}${path.extname(name).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 10)}`;
+  fs.writeFileSync(path.join(UPLOAD_DIR, stored), req.body);
+  const caption = String(req.get('X-Caption') ? decodeURIComponent(req.get('X-Caption')) : '').trim().slice(0, 5000);
+  const cid = tx(() => {
+    const fid = insert('files', { task_id: id, user_id: req.user.id, name, size: req.body.length, mime, stored });
+    return insert('task_comments', { task_id: id, user_id: req.user.id, kind: 'text', body: caption, file_id: fid });
+  });
+  logActivity(req.user.id, 'task', id, 'file', `прикрепил файл «${name}» к задаче «${task.title}»`);
+  return get(`${COMMENT_SELECT} WHERE c.id = ?`, cid);
+}));
+
+api.get('/tasks/:id/files', wrap((req) => all(`SELECT f.id, f.name, f.size, f.mime, f.created_at, u.name user_name
+  FROM files f LEFT JOIN users u ON u.id = f.user_id WHERE f.task_id = ? ORDER BY f.id DESC`, idParam(req))));
+
+// Скачивание / просмотр (?inline=1 — открыть в браузере, для картинок)
+api.get('/files/:id', (req, res, next) => {
+  try {
+    const f = get('SELECT * FROM files WHERE id = ?', idParam(req));
+    if (!f) throw notFound();
+    const file = path.join(UPLOAD_DIR, path.basename(f.stored));
+    if (!fs.existsSync(file)) throw notFound();
+    const safeInline = req.query.inline && /^image\/(png|jpe?g|gif|webp)$/.test(f.mime || '');
+    res.setHeader('Content-Type', safeInline ? f.mime : 'application/octet-stream');
+    res.setHeader('Content-Disposition', `${safeInline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.sendFile(file);
+  } catch (e) { next(e); }
+});
 
 /* ---------- tickets (заявки) ---------- */
 const TICKET_FIELDS = ['title', 'description', 'category', 'priority', 'status', 'location', 'requester', 'requester_contact',
@@ -620,6 +680,7 @@ api.get('/search', wrap((req) => {
 api.use((req, res) => res.status(404).json({ error: 'Маршрут не найден' }));
 api.use((err, req, res, _next) => {
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Файл слишком большой (максимум 25 МБ)' });
   const msg = String(err?.message || err);
   if (msg.includes('CHECK constraint')) return res.status(400).json({ error: 'Недопустимое значение поля' });
   if (msg.includes('FOREIGN KEY')) return res.status(400).json({ error: 'Связанная запись не найдена' });

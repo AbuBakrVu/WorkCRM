@@ -18,7 +18,7 @@ const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147
 const pickOne = (a) => a[Math.floor(rnd() * a.length)];
 
 tx(() => {
-  if (force) for (const t of ['task_comments', 'activity', 'transactions', 'time_entries', 'deals', 'ticket_comments', 'tickets', 'tasks', 'project_members', 'projects', 'clients', 'users'])
+  if (force) for (const t of ['task_comments', 'files', 'activity', 'transactions', 'time_entries', 'deals', 'ticket_comments', 'tickets', 'tasks', 'project_members', 'projects', 'clients', 'users'])
     db.exec(`DELETE FROM ${t}; DELETE FROM sqlite_sequence WHERE name='${t}';`);
 
   const pwd = hashPassword('demo12345');
