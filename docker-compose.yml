@@ -1,12 +1,13 @@
+# Настройки берутся из .env (его создаёт install.sh)
 services:
   crm:
     build: .
     container_name: crm
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"   # наружу открывает Caddy/nginx
+      - "${BIND:-127.0.0.1}:3000:3000"   # 127.0.0.1 — за Caddy/nginx; 0.0.0.0 — доступ по IP
     environment:
-      - COOKIE_SECURE=true      # false, если пока без HTTPS
-      # - JWT_SECRET=длинная_случайная_строка   # иначе генерируется и хранится в /data
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - ALLOW_WEB_SETUP=false             # администратор создаётся через install.sh
     volumes:
       - ./data:/data

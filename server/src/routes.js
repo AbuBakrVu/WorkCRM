@@ -56,11 +56,13 @@ const nowIso = () => new Date().toISOString();
 /* ---------- auth ---------- */
 api.get('/health', (req, res) => res.json({ ok: true }));
 
-api.get('/auth/setup', wrap(() => ({ needsSetup: get('SELECT COUNT(*) c FROM users').c === 0 })));
+// Веб-форма первого запуска. На сервере отключена (ALLOW_WEB_SETUP=false) — администратор создаётся через install.sh
+const WEB_SETUP = process.env.ALLOW_WEB_SETUP !== 'false';
+api.get('/auth/setup', wrap(() => ({ needsSetup: WEB_SETUP && get('SELECT COUNT(*) c FROM users').c === 0 })));
 
 // Первый запуск: создание администратора (работает только при пустой таблице users)
 api.post('/auth/setup', wrap((req, res) => {
-  if (get('SELECT COUNT(*) c FROM users').c > 0) throw new HttpError(403, 'Система уже настроена');
+  if (!WEB_SETUP || get('SELECT COUNT(*) c FROM users').c > 0) throw new HttpError(403, 'Система уже настроена');
   const { name, email, password } = req.body || {};
   if (!name || !email || !password || password.length < 8) throw bad('Укажите имя, email и пароль от 8 символов');
   const id = insert('users', { name, email, password_hash: hashPassword(password), role: 'admin', color: '#4f46e5', position: 'Администратор' });

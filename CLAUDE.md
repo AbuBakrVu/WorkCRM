@@ -21,6 +21,7 @@ cd server && DATA_DIR=./dev-data npm run seed                 # демо-дан�
 cd client && VITE_API=http://localhost:3001 npm run dev       # UI на :5173 (прокси /api → VITE_API)
 cd client && npm run build                                    # проверка, что фронт собирается
 
+./install.sh                                                  # первичная установка / сброс пароля админа (интерактивно — запускает владелец)
 ./deploy.sh                                                   # выкатить на прод
 docker compose logs -f crm                                    # логи прода
 docker compose exec -T crm npm run backup                     # бэкап прода

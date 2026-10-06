@@ -6,7 +6,8 @@
     "start": "node --disable-warning=ExperimentalWarning src/index.js",
     "dev": "node --watch --disable-warning=ExperimentalWarning src/index.js",
     "seed": "node --disable-warning=ExperimentalWarning src/seed.js",
-    "backup": "node --disable-warning=ExperimentalWarning src/backup.js"
+    "backup": "node --disable-warning=ExperimentalWarning src/backup.js",
+    "create-admin": "node --disable-warning=ExperimentalWarning src/create-admin.js"
   },
   "keywords": [],
   "author": "",
