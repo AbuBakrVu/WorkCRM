@@ -1,24 +1,28 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-canvas: #f6f7f9;
-  --color-panel: #ffffff;
-  --color-side: #fbfbfc;
-  --color-line: #eceef2;
-  --color-line-strong: #e2e5ea;
-  --color-ink: #1f2430;
-  --color-ink-2: #4b5262;
-  --color-ink-3: #8a91a0;
-  --color-brand: #8ee07b;
-  --color-brand-strong: #6fcf5a;
-  --color-brand-ink: #173f12;
-  --color-violet: #6d5ef6;
-  --color-st-done: #7fd093;
-  --color-st-progress: #f3c35f;
-  --color-st-stuck: #e8706f;
-  --color-st-review: #9cc6f5;
-  --color-st-planned: #c7cbd4;
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Тёплая светлая база и «лесной» зелёный акцент */
+  --color-canvas: #edf0ee;
+  --color-panel: #fafbf9;
+  --color-side: #f3f5f3;
+  --color-line: #e3e8e4;
+  --color-line-strong: #d5dcd7;
+  --color-ink: #17201b;
+  --color-ink-2: #48524c;
+  --color-ink-3: #879088;
+  --color-brand: #1e6a45;
+  --color-brand-strong: #17573a;
+  --color-brand-ink: #ffffff;
+  --color-violet: #155c3b;
+  --color-forest: #0e2f20;
+  --color-forest-2: #133d29;
+  --color-mint: #5fb383;
+  --color-st-done: #4fae6f;
+  --color-st-progress: #e8b04b;
+  --color-st-stuck: #e0645f;
+  --color-st-review: #7fb2e8;
+  --color-st-planned: #c3cac5;
 }
 
 html, body, #root { height: 100%; }
@@ -61,9 +65,61 @@ select.input { @apply pr-8 appearance-none bg-no-repeat;
 
 }
 
+/* ---------- Анимации ---------- */
+:root { --ease-out: cubic-bezier(.2, .8, .2, 1); }
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-@keyframes slideIn { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
-@keyframes popIn { from { transform: translateY(6px) scale(.98); opacity: 0 } to { transform: none; opacity: 1 } }
-.anim-fade { animation: fadeIn .15s ease-out; }
-.anim-slide { animation: slideIn .2s ease-out; }
-.anim-pop { animation: popIn .16s ease-out; }
+@keyframes slideIn { from { transform: translateX(48px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes slideInLeft { from { transform: translateX(-100%) } to { transform: none } }
+@keyframes popIn { from { transform: translateY(8px) scale(.97); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes riseIn { from { transform: translateY(16px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes revealUp { from { transform: translateY(110%) } to { transform: none } }
+@keyframes toastIn { from { transform: translateY(20px) scale(.95); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.anim-fade { animation: fadeIn .2s ease-out both; }
+.anim-slide { animation: slideIn .38s var(--ease-out) both; }
+.anim-slide-left { animation: slideInLeft .32s var(--ease-out) both; }
+.anim-pop { animation: popIn .22s var(--ease-out) both; }
+.anim-toast { animation: toastIn .3s var(--ease-out) both; }
+.page-enter { animation: riseIn .45s var(--ease-out) both; }
+
+/* Заголовок «выезжает» из-под маски */
+.reveal { display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: .08em; margin-bottom: -.08em; }
+.reveal > span { display: inline-block; animation: revealUp .75s var(--ease-out) both; }
+.reveal-sub { animation: riseIn .6s var(--ease-out) .12s both; }
+
+/* Дети появляются по очереди */
+.stagger > * { animation: riseIn .55s var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: .04s } .stagger > *:nth-child(2) { animation-delay: .09s }
+.stagger > *:nth-child(3) { animation-delay: .14s } .stagger > *:nth-child(4) { animation-delay: .19s }
+.stagger > *:nth-child(5) { animation-delay: .24s } .stagger > *:nth-child(6) { animation-delay: .29s }
+.stagger > *:nth-child(7) { animation-delay: .34s } .stagger > *:nth-child(8) { animation-delay: .39s }
+.stagger > *:nth-child(n+9) { animation-delay: .44s }
+
+/* Карточка приподнимается при наведении */
+.lift { transition: transform .28s var(--ease-out), box-shadow .28s var(--ease-out), border-color .2s; }
+.lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(14, 47, 32, .35); }
+.lift:active { transform: translateY(-1px); }
+
+/* Стрелка в круге поворачивается при наведении на карточку */
+.arrow-btn { transition: transform .3s var(--ease-out), background-color .2s, color .2s; }
+.group:hover .arrow-btn { transform: rotate(45deg); }
+
+/* Фон «тёмно-зелёной» карточки: тонкие диагональные волны */
+.forest-pattern {
+  background-color: var(--color-forest);
+  background-image:
+    repeating-radial-gradient(circle at 110% -10%, transparent 0 18px, rgba(120, 200, 150, .09) 18px 19px),
+    linear-gradient(150deg, #154630 0%, #0e2f20 55%, #0a2418 100%);
+}
+.forest-solid { background-image: linear-gradient(150deg, #1f6a45 0%, #144a31 60%, #0f3a26 100%); }
+
+/* Цифры таймера прокручиваются, как в счётчике */
+.odo { display: inline-flex; font-variant-numeric: tabular-nums; line-height: 1; }
+.odo-digit { display: inline-block; height: 1em; overflow: hidden; position: relative; }
+.odo-reel { display: flex; flex-direction: column; transition: transform .5s var(--ease-out); }
+.odo-reel > span { height: 1em; display: block; }
+.odo-sep { display: inline-block; opacity: .55; padding: 0 .03em; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
+}

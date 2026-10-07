@@ -9,9 +9,10 @@ import { fmtHours, fmtMoneyShort, fmtMoney, fmtDate, timeAgo, MONTHS, toDateStr,
 import { Card, Stat, Avatar, Pill, Spinner, PageHeader, Button, cx } from '../components/ui';
 import { TaskStatusPill } from '../components/Tasks';
 import { SlaBadge } from './Tickets';
+import { TimerCard } from '../components/TimerCard';
 
-export const C_INCOME = '#4fae3d';
-export const C_EXPENSE = '#8b7ff5';
+export const C_INCOME = '#1e6a45';
+export const C_EXPENSE = '#9fd2b1';
 
 export function ChartTip({ active, payload, label, money }) {
   if (!active || !payload?.length) return null;
@@ -77,18 +78,18 @@ export default function Dashboard() {
         </>} />
 
       {/* KPI */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Открытые задачи" value={t.open || 0} icon={ListTodo} tone="violet"
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger">
+        <Stat featured to="/projects" label="Открытые задачи" value={t.open || 0}
           sub={`${t.in_progress || 0} в работе · ${t.unassigned || 0} без исполнителя`} />
-        <Stat label="Просрочено" value={t.overdue || 0} icon={AlertTriangle} tone={t.overdue ? 'red' : 'default'}
+        <Stat to="/projects" label="Просрочено" value={t.overdue || 0} tone={t.overdue ? 'red' : undefined}
           sub={<span className={t.due_soon ? 'text-amber-600' : ''}>{t.due_soon || 0} со сроком в ближайшие 3 дня</span>} />
-        <Stat label="Закрыто за неделю" value={t.done_week || 0} icon={CheckCircle2} tone="green" sub={`создано за неделю: ${t.created_week || 0}`} />
-        <Stat label="Часы за 7 дней" value={fmtHours(weekTotal)} icon={Timer} tone="amber"
+        <Stat to="/projects" label="Закрыто за неделю" value={t.done_week || 0} sub={`создано за неделю: ${t.created_week || 0}`} />
+        <Stat to="/time" label="Часы за 7 дней" value={fmtHours(weekTotal)}
           sub={`открытых заявок: ${d.tickets.open || 0}${d.tickets.overdue ? ` · ${d.tickets.overdue} просрочено` : ''}`} />
       </div>
 
       {/* Проекты + внимание */}
-      <div className="grid lg:grid-cols-3 gap-3 mt-3">
+      <div className="grid lg:grid-cols-3 gap-3 mt-3 stagger">
         <Card className="lg:col-span-2 min-w-0">
           <CardHead title="Проекты" link="Все проекты" to="/projects" />
           <div className="overflow-x-auto px-2 pb-2">
@@ -152,8 +153,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Динамика задач + загрузка */}
-      <div className="grid lg:grid-cols-3 gap-3 mt-3">
+      {/* Динамика задач + таймер */}
+      <div className="grid lg:grid-cols-3 gap-3 mt-3 stagger">
         <Card className="lg:col-span-2 p-5 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[15px] font-semibold">Задачи за 14 дней</h2>
@@ -172,27 +173,11 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </Card>
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[15px] font-semibold">Часы за неделю</h2>
-            <Link to="/time" className="text-[12.5px] text-violet font-medium">Учёт →</Link>
-          </div>
-          <div className="space-y-3">
-            {d.hours_week.map((u) => (
-              <div key={u.id} className="flex items-center gap-2.5">
-                <Avatar user={u} size={26} ring={false} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between text-[12.5px]"><span className="truncate">{u.name}</span><span className="text-ink-2 tabular">{fmtHours(u.sec)}</span></div>
-                  <div className="h-1.5 bg-line rounded-full mt-1 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(u.sec / maxUser) * 100}%`, background: u.color }} /></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <TimerCard />
       </div>
 
-      {/* Мои задачи / заявки / активность */}
-      <div className="grid lg:grid-cols-3 gap-3 mt-3">
+      {/* Мои задачи / заявки / часы */}
+      <div className="grid lg:grid-cols-3 gap-3 mt-3 stagger">
         <Card className="min-w-0">
           <CardHead title="Мои задачи" extra={<span className="text-[12px] text-ink-3">{d.my_tasks.length}</span>} />
           <div className="px-2 pb-2">
@@ -227,14 +212,19 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <Card className="min-w-0">
-          <CardHead title="Активность" />
-          <div className="px-5 pb-4 space-y-3">
-            {d.activity.slice(0, 7).map((a) => (
-              <div key={a.id} className="flex gap-2.5 text-[12.5px]">
-                <Avatar user={{ name: a.user_name || '?', color: a.user_color }} size={24} ring={false} />
-                <div className="min-w-0"><span className="font-medium">{a.user_name}</span> <span className="text-ink-2">{a.text}</span>
-                  <div className="text-[11px] text-ink-3">{timeAgo(a.created_at)}</div></div>
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[15px] font-semibold">Часы за неделю</h2>
+            <Link to="/time" className="text-[12.5px] text-violet font-medium">Учёт →</Link>
+          </div>
+          <div className="space-y-3">
+            {d.hours_week.map((u) => (
+              <div key={u.id} className="flex items-center gap-2.5">
+                <Avatar user={u} size={26} ring={false} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between text-[12.5px]"><span className="truncate">{u.name}</span><span className="text-ink-2 tabular">{fmtHours(u.sec)}</span></div>
+                  <div className="h-1.5 bg-line rounded-full mt-1 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(u.sec / maxUser) * 100}%`, background: u.color }} /></div>
+                </div>
               </div>
             ))}
           </div>

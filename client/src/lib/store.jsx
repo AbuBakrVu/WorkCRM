@@ -45,8 +45,10 @@ export function AppProvider({ children }) {
     } catch (e) { toast(e.message, 'error'); }
   }, [toast, timer]);
   const stopTimer = useCallback(async () => {
-    await api.post('/time/stop');
-    setTimer(null); toast('Время записано'); bump();
+    const e = await api.post('/time/stop');
+    const sec = e?.duration_sec ?? 0;
+    const hms = [Math.floor(sec / 3600), Math.floor((sec % 3600) / 60), sec % 60].map((n) => String(n).padStart(2, '0')).join(':');
+    setTimer(null); toast(`Записано ${hms} в табель`); bump();
   }, [toast, bump]);
 
   const logout = async () => { await api.post('/auth/logout'); setUser(null); };

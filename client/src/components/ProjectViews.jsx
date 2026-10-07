@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Clock, Calendar } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Calendar, Flag, MessageSquare } from 'lucide-react';
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { PROJECT_STATUS, TASK_STATUS } from '../lib/constants';
@@ -7,12 +7,24 @@ import { fmtDate, fmtHM, fmtHours, parseDate, MONTHS, toDateStr } from '../lib/f
 import { AvatarStack, Progress, StatusDot, Card, Avatar, cx } from './ui';
 
 /* ---------------- Канбан задач ---------------- */
+// Цвет метки проекта — стабильный по названию
+const TAG_COLORS = [['#1e6a45', '#e3f2e8'], ['#2f5fb3', '#e4ecfa'], ['#b4561b', '#fbeadd'], ['#8a3fb0', '#f2e6f8'], ['#0f7d84', '#dff3f3'], ['#a63a4f', '#f8e4e8']];
+const tagColor = (name = '') => TAG_COLORS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % TAG_COLORS.length];
+function dueLabel(d, today) {
+  if (!d) return null;
+  const days = Math.round((new Date(d) - new Date(today)) / 864e5);
+  if (days < 0) return { text: `просрочено ${-days} дн`, late: true };
+  if (days === 0) return { text: 'сегодня', soon: true };
+  if (days === 1) return { text: 'завтра', soon: true };
+  return { text: `через ${days} дн`, soon: days <= 3 };
+}
+
 export function TaskKanban({ tasks, userMap, onOpen, onPatch }) {
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
   const today = toDateStr(new Date());
   return (
-    <div className="flex gap-3 overflow-x-auto pb-3">
+    <div className="flex gap-3 overflow-x-auto pb-3 stagger">
       {Object.entries(TASK_STATUS).map(([status, s]) => {
         const items = tasks.filter((t) => t.status === status);
         return (
@@ -20,29 +32,36 @@ export function TaskKanban({ tasks, userMap, onOpen, onPatch }) {
             onDragOver={(e) => { e.preventDefault(); setOver(status); }}
             onDragLeave={() => setOver(null)}
             onDrop={() => { if (dragId) onPatch(dragId, { status }); setDragId(null); setOver(null); }}
-            className={cx('w-[320px] shrink-0 rounded-2xl border p-2.5 transition-colors', over === status ? 'bg-violet/5 border-violet/30' : 'bg-canvas/70 border-line')}>
-            <div className="flex items-center justify-between px-1.5 pb-2.5">
-              <StatusDot color={s.color} label={<span className="font-medium text-ink">{s.label}</span>} />
-              <span className="text-[12px] text-ink-3">{items.length}</span>
+            className={cx('w-[320px] shrink-0 rounded-[22px] border p-2.5 transition-colors duration-300', over === status ? 'bg-brand/[.06] border-brand/40' : 'bg-panel/60 border-line')}>
+            <div className="flex items-center justify-between px-2 pt-1 pb-3">
+              <span className="inline-flex items-center gap-2 text-[14px] font-semibold"><span className="size-2.5 rounded-full" style={{ background: s.color }} />{s.label}</span>
+              <span className="min-w-6 h-6 px-1.5 rounded-full border border-line text-[11.5px] text-ink-2 inline-flex items-center justify-center tabular">{items.length}</span>
             </div>
-            <div className="space-y-2 min-h-16">
+            <div className="space-y-2.5 min-h-24">
               {items.map((t) => {
-                const late = t.status !== 'done' && t.due_date && t.due_date < today;
+                const due = dueLabel(t.status !== 'done' && t.due_date, today);
+                const [fg, bg] = tagColor(t.project_name);
+                const people = [t.assignee_id, ...(t.coassignee_ids || [])].map((id) => userMap[id]).filter(Boolean);
                 return (
                   <div key={t.id} draggable onDragStart={() => setDragId(t.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(t.id)}
-                    className={cx('bg-panel rounded-xl border border-line p-3 cursor-pointer hover:shadow-md transition-shadow', dragId === t.id && 'opacity-50')}>
-                    <div className="text-[11.5px] text-ink-3 truncate">{t.project_name}</div>
-                    <div className="text-[13.5px] font-medium leading-snug mt-0.5">{t.title}</div>
-                    {t.description && <div className="text-[12px] text-ink-2 mt-1 line-clamp-2">{t.description}</div>}
-                    <div className="flex items-center justify-between mt-2.5">
-                      <span className="flex items-center gap-1.5 text-[12px] text-ink-2">
-                        {t.assignee_id ? <><Avatar user={userMap[t.assignee_id]} size={20} ring={false} />{userMap[t.assignee_id]?.name.split(' ')[0]}</> : <span className="text-ink-3">Не назначена</span>}
-                      </span>
-                      {t.due_date && <span className={cx('inline-flex items-center gap-1 text-[11.5px]', late ? 'text-red-600 font-medium' : 'text-ink-3')}><Calendar size={12} />{fmtDate(t.due_date)}</span>}
+                    className={cx('group bg-panel rounded-[18px] border border-line p-3.5 cursor-pointer lift', dragId === t.id && 'opacity-40 rotate-1')}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-flex items-center h-6 px-2 rounded-md text-[11.5px] font-semibold truncate max-w-[200px]" style={{ color: fg, background: bg }}>{t.project_name}</span>
+                      {due?.late && <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-red-600"><Flag size={12} />срочно</span>}
+                    </div>
+                    <div className="text-[14px] font-semibold leading-snug mt-2.5">{t.title}</div>
+                    {t.description && <div className="text-[12.5px] text-ink-3 mt-1 line-clamp-2">{t.description}</div>}
+                    <div className="flex items-center justify-between mt-3.5 pt-3 border-t border-line">
+                      <div className="flex items-center gap-3 text-[12px] text-ink-3">
+                        {due && <span className={cx('inline-flex items-center gap-1', due.late ? 'text-red-600 font-medium' : due.soon && 'text-amber-600')}><Clock size={13} />{due.text}</span>}
+                        <span className="inline-flex items-center gap-1"><MessageSquare size={13} />{t.comments_count || 0}</span>
+                      </div>
+                      <AvatarStack users={people} size={24} max={3} />
                     </div>
                   </div>
                 );
               })}
+              {!items.length && <div className="h-20 rounded-[16px] border-2 border-dashed border-line flex items-center justify-center text-[12.5px] text-ink-3">Перетащите задачу сюда</div>}
             </div>
           </div>
         );

@@ -4,8 +4,9 @@ import { ChevronLeft, ChevronRight, Plus, Play, Square, Trash2, Download, Timer 
 import { useApp, useLoad, useNow } from '../lib/store';
 import { api } from '../lib/api';
 import { fmtHM, fmtHMS, fmtTime, fmtDate, toDateStr, parseDate, fmtHours } from '../lib/format';
-import { Button, Card, Modal, Field, Select, Avatar, Popover, MenuItem, Empty, PageHeader, cx } from '../components/ui';
+import { Button, Card, Modal, Field, Select, Avatar, Popover, MenuItem, Empty, PageHeader, Stat, cx } from '../components/ui';
 import { TimerStartModal } from '../components/TimerStart';
+import { TimerCard } from '../components/TimerCard';
 
 const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const monday = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
@@ -71,20 +72,13 @@ export default function TimeTracker() {
         </>} />
 
       {/* Блок таймера */}
-      <Card className="p-4 flex flex-wrap items-center gap-4 mb-4">
-        <div className={cx('size-11 rounded-2xl flex items-center justify-center', timer ? 'bg-violet text-white' : 'bg-canvas text-ink-2 border border-line')}><Timer size={20} /></div>
-        <div className="flex-1 min-w-0">
-          {timer ? (<>
-            <div className="text-[13.5px] font-medium truncate">{timer.description || 'Без описания'}</div>
-            <div className="text-[12px] text-ink-3 truncate">{timer.project_name || (timer.ticket_id ? `Заявка #${timer.ticket_id}` : 'Без проекта')}{timer.task_title ? ` · ${timer.task_title}` : ''} · с {fmtTime(timer.started_at)}</div>
-          </>) : (<>
-            <div className="text-[13.5px] font-medium">Таймер не запущен</div>
-            <div className="text-[12px] text-ink-3">Запустите таймер на проект, задачу или заявку — время запишется автоматически</div>
-          </>)}
+      <div className="grid lg:grid-cols-3 gap-3 mb-5 stagger">
+        <TimerCard />
+        <div className="lg:col-span-2 grid grid-cols-2 gap-3">
+          <Stat featured label="За эту неделю" value={fmtHours(total)} sub={`${sheet.length} ${sheet.length === 1 ? 'проект/заявка' : 'проектов и заявок'}`} />
+          <Stat label="Сегодня" value={fmtHours(dayTotals[(new Date().getDay() + 6) % 7] || 0)} sub={isThisWeek ? 'по табелю текущей недели' : 'выбрана другая неделя'} />
         </div>
-        {timer && <div className="text-[26px] font-semibold tabular tracking-tight">{fmtHMS((now - new Date(timer.started_at)) / 1000)}</div>}
-        {timer ? <Button variant="dark" icon={Square} onClick={stopTimer}>Остановить</Button> : <Button variant="violet" icon={Play} onClick={() => setStartOpen(true)}>Запустить</Button>}
-      </Card>
+      </div>
 
       {/* Навигация */}
       <div className="flex flex-wrap items-center gap-2 mb-3">

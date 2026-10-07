@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored } from '../lib/store';
 import { api } from '../lib/api';
-import { Avatar, IconButton, Popover, MenuItem, cx } from './ui';
+import { Avatar, IconButton, Popover, MenuItem, Odometer, cx } from './ui';
 import { fmtHMS, timeAgo } from '../lib/format';
 import { TimerStartModal } from './TimerStart';
 import { ROLES, PROJECT_STATUS, TICKET_STATUS, DEAL_STAGE } from '../lib/constants';
@@ -98,8 +98,8 @@ export default function Layout() {
                 <div className="px-2 mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-ink">{s.section}</div>
                 {s.items.map((i) => (
                   <NavLink key={i.to} to={i.to} end={i.end}
-                    className={({ isActive }) => cx('flex items-center gap-2.5 h-9 px-2.5 rounded-xl text-[13.5px] transition-colors',
-                      isActive ? 'bg-panel text-ink font-medium shadow-[0_1px_2px_rgba(16,24,40,.06)] border border-line' : 'text-ink-2 hover:bg-canvas border border-transparent')}>
+                    className={({ isActive }) => cx('flex items-center gap-2.5 h-10 px-3 rounded-xl text-[13.5px] transition-all duration-200',
+                      isActive ? 'bg-brand/[.07] text-brand font-semibold border border-brand/40' : 'text-ink-2 hover:bg-canvas hover:text-ink border border-transparent')}>
                     <i.icon size={17} strokeWidth={1.8} />
                     <span className="flex-1 truncate">{i.label}</span>
                     {i.badge === 'tickets' && dash?.tickets?.new > 0 && <span className="text-[11px] font-semibold text-white bg-violet rounded-full px-1.5 min-w-5 text-center">{dash.tickets.new}</span>}
@@ -135,13 +135,13 @@ export default function Layout() {
       <div className="hidden lg:block relative shrink-0">{sidebar}</div>
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-ink/25 anim-fade" onClick={() => setMobileOpen(false)}>
-          <div className="h-full w-fit relative" onClick={(e) => e.stopPropagation()}>{sidebar}</div>
+          <div className="h-full w-fit relative anim-slide-left" onClick={(e) => e.stopPropagation()}>{sidebar}</div>
         </div>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar crumb={crumb} onMenu={() => setMobileOpen(true)} onSearch={() => setSearchOpen(true)} dash={dash} />
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6"><Outlet /></div>
+          <div key={loc.pathname} className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6 page-enter"><Outlet /></div>
         </main>
       </div>
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
@@ -169,15 +169,18 @@ function Topbar({ crumb, onMenu, onSearch, dash }) {
         <IconButton icon={Search} title="Поиск" onClick={onSearch} className="md:hidden" />
         <NotificationsButton activity={dash?.activity} />
         {timer ? (
-          <button onClick={stopTimer} title={timer.project_name || timer.ticket_title || 'Таймер'}
-            className="flex items-center gap-2 h-9 pl-2 pr-3.5 rounded-full bg-violet text-white font-semibold text-[13px] shadow-[0_6px_16px_-6px_rgba(109,94,246,.7)] hover:bg-violet/90">
-            <span className="size-6 rounded-full bg-white/20 flex items-center justify-center"><Square size={11} fill="currentColor" /></span>
-            <span className="tabular">{fmtHMS(elapsed)}</span>
+          <button onClick={stopTimer} title={`${timer.project_name || timer.ticket_title || 'Таймер'} — остановить`}
+            className="flex items-center gap-2.5 h-10 pl-1.5 pr-4 rounded-full forest-pattern text-white font-semibold text-[14px] shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110 transition">
+            <span className="relative size-7 rounded-full bg-red-500 flex items-center justify-center">
+              <span className="absolute inset-0 rounded-full bg-red-500/60 animate-ping" />
+              <Square size={11} fill="currentColor" className="relative" />
+            </span>
+            <Odometer value={fmtHMS(elapsed)} />
           </button>
         ) : (
           <button onClick={() => setStartOpen(true)}
-            className="flex items-center gap-2 h-9 pl-2 pr-3.5 rounded-full bg-violet text-white font-semibold text-[13px] shadow-[0_6px_16px_-6px_rgba(109,94,246,.7)] hover:bg-violet/90">
-            <span className="size-6 rounded-full bg-white/20 flex items-center justify-center"><Play size={11} fill="currentColor" /></span>
+            className="flex items-center gap-2 h-10 pl-1.5 pr-4 rounded-full forest-pattern text-white font-semibold text-[13.5px] shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110 transition">
+            <span className="size-7 rounded-full bg-white text-forest flex items-center justify-center"><Play size={12} fill="currentColor" /></span>
             <span className="hidden sm:inline">Таймер</span>
           </button>
         )}

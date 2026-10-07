@@ -8,7 +8,7 @@ import { taskPerms } from '../lib/perms';
 import { api, fileUrl, fmtSize } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
-import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, cx } from './ui';
+import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx } from './ui';
 
 export const isOverdue = (t) => t.status !== 'done' && t.due_date && t.due_date < todayStr();
 
@@ -285,10 +285,10 @@ export function TaskDrawer({ id, onClose }) {
                 <span className="text-[12px] text-ink-3 inline-flex items-center gap-1.5"><Lock size={13} />Статус меняют исполнитель, постановщик или администратор</span>
               )}
               {t.status !== 'done' && (timerHere ? (
-                <button onClick={stopTimer} title="Остановить таймер"
-                  className="flex items-center gap-2 h-9 pl-1.5 pr-3.5 rounded-full bg-violet text-white font-semibold text-[13px] shadow-[0_6px_16px_-6px_rgba(109,94,246,.7)] hover:bg-violet/90">
-                  <span className="size-6 rounded-full bg-white/20 flex items-center justify-center"><Square size={11} fill="currentColor" /></span>
-                  <span className="tabular">{fmtHMS((now - new Date(timer.started_at)) / 1000)}</span>
+                <button onClick={stopTimer} title="Остановить и записать в табель"
+                  className="flex items-center gap-2.5 h-10 pl-1.5 pr-4 rounded-full forest-pattern text-white font-semibold text-[14px] shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110">
+                  <span className="relative size-7 rounded-full bg-red-500 flex items-center justify-center"><span className="absolute inset-0 rounded-full bg-red-500/60 animate-ping" /><Square size={11} fill="currentColor" className="relative" /></span>
+                  <Odometer value={fmtHMS((now - new Date(timer.started_at)) / 1000)} />
                 </button>
               ) : (
                 <Button icon={Timer} onClick={() => startTimer({ project_id: t.project_id, task_id: t.id, description: t.title })}

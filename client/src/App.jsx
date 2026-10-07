@@ -39,11 +39,11 @@ function Gate() {
 function Toasts() {
   const { toasts } = useApp();
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2">
+    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2 pointer-events-none">
       {toasts.map((t) => (
-        <div key={t.id} className={cx('flex items-center gap-2 pl-3 pr-4 h-10 rounded-xl shadow-lg text-[13px] font-medium anim-pop',
-          t.kind === 'error' ? 'bg-red-600 text-white' : 'bg-ink text-white')}>
-          {t.kind === 'error' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} className="text-brand" />}
+        <div key={t.id} className={cx('flex items-center gap-2 pl-3.5 pr-4 h-11 rounded-full shadow-xl text-[13px] font-medium anim-toast',
+          t.kind === 'error' ? 'bg-red-600 text-white' : 'bg-forest text-white')}>
+          {t.kind === 'error' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} className="text-mint" />}
           {t.text}
         </div>
       ))}

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { X, ChevronDown, Check } from 'lucide-react';
+import { X, ChevronDown, Check, ArrowUpRight } from 'lucide-react';
 import { initials } from '../lib/format';
 
 export const cx = (...a) => a.filter(Boolean).join(' ');
@@ -84,7 +85,7 @@ export function AvatarStack({ users = [], max = 3, size = 26 }) {
 }
 
 export function Card({ className, children, ...p }) {
-  return <div {...p} className={cx('bg-panel rounded-2xl border border-line', className)}>{children}</div>;
+  return <div {...p} className={cx('bg-panel rounded-[20px] border border-line', className)}>{children}</div>;
 }
 
 export function Modal({ open, onClose, title, children, footer, width = 520 }) {
@@ -221,50 +222,132 @@ export function Spinner() {
   return <div className="flex justify-center py-16"><div className="size-6 rounded-full border-2 border-line border-t-violet animate-spin" /></div>;
 }
 
+// Индикатор, который плавно «переезжает» к активному элементу (для вкладок и сегментов)
+function useSlider(value, deps = []) {
+  const wrap = useRef(null);
+  const [box, setBox] = useState(null);
+  useLayoutEffect(() => {
+    const el = wrap.current?.querySelector('[data-active="true"]');
+    if (el) setBox({ left: el.offsetLeft, width: el.offsetWidth, top: el.offsetTop, height: el.offsetHeight });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, ...deps]);
+  useEffect(() => {
+    const on = () => { const el = wrap.current?.querySelector('[data-active="true"]'); if (el) setBox({ left: el.offsetLeft, width: el.offsetWidth, top: el.offsetTop, height: el.offsetHeight }); };
+    window.addEventListener('resize', on); return () => window.removeEventListener('resize', on);
+  }, []);
+  return [wrap, box];
+}
+
 export function Tabs({ tabs, value, onChange }) {
+  const [wrap, box] = useSlider(value, [tabs.length]);
   return (
-    <div className="flex items-center gap-1 border-b border-line overflow-x-auto">
+    <div ref={wrap} className="relative flex items-center gap-1 border-b border-line overflow-x-auto">
       {tabs.map((t) => (
-        <button key={t.value} onClick={() => onChange(t.value)}
+        <button key={t.value} data-active={value === t.value} onClick={() => onChange(t.value)}
           className={cx('relative flex items-center gap-1.5 px-2.5 h-10 text-[13px] font-medium whitespace-nowrap transition-colors',
             value === t.value ? 'text-ink' : 'text-ink-3 hover:text-ink-2')}>
           {t.icon && <t.icon size={15} />}
           {t.label}
           {t.count != null && <span className="text-[11px] text-ink-3 bg-canvas rounded-full px-1.5">{t.count}</span>}
-          {value === t.value && <span className="absolute left-1 right-1 -bottom-px h-0.5 rounded-full bg-violet" />}
+        </button>
+      ))}
+      {box && <span className="absolute -bottom-px h-0.5 rounded-full bg-violet transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)]" style={{ left: box.left + 4, width: box.width - 8 }} />}
+    </div>
+  );
+}
+
+// Сегментированный переключатель с «бегущей» плашкой. items: [{ value, label, count?, tone? }]
+export function Segmented({ items, value, onChange, size = 'md', className }) {
+  const [wrap, box] = useSlider(value, [items.length, items.map((i) => i.count).join()]);
+  const active = items.find((i) => i.value === value);
+  return (
+    <div ref={wrap} className={cx('relative flex items-center gap-0.5 p-1 rounded-full border border-line bg-panel max-w-full overflow-x-auto', className)}>
+      {box && <span className={cx('absolute rounded-full transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)]', active?.tone === 'red' ? 'bg-red-600' : 'bg-violet')}
+        style={{ left: box.left, width: box.width, top: box.top, height: box.height }} />}
+      {items.map((i) => (
+        <button key={i.value} data-active={value === i.value} onClick={() => onChange(i.value)}
+          className={cx('relative z-[1] flex items-center gap-1.5 rounded-full font-medium whitespace-nowrap shrink-0 transition-colors duration-300',
+            size === 'sm' ? 'px-3 h-7 text-[12px]' : 'px-3.5 h-8 text-[12.5px]',
+            value === i.value ? 'text-white' : i.tone === 'red' && i.count ? 'text-red-600' : 'text-ink-2 hover:text-ink')}>
+          {i.icon && <i.icon size={14} />}{i.label}
+          {i.count != null && <span className={cx('text-[11px] tabular', value === i.value ? 'opacity-70' : 'text-ink-3')}>{i.count}</span>}
         </button>
       ))}
     </div>
   );
 }
 
+// Числа «набегают» от 0 до значения. Понимает строки вида «136 ч», «1,6 млн ₽», «42%»
+export function CountUp({ value, duration = 900 }) {
+  const str = String(value ?? '');
+  const m = /^(-?[\d\s ]*[\d](?:[.,]\d+)?)(.*)$/.exec(str);
+  const target = m ? parseFloat(m[1].replace(/[\s ]/g, '').replace(',', '.')) : NaN;
+  const decimals = m && /[.,](\d+)/.exec(m[1]) ? /[.,](\d+)/.exec(m[1])[1].length : 0;
+  const [cur, setCur] = useState(0);
+  useEffect(() => {
+    if (!Number.isFinite(target)) return;
+    let raf; const t0 = performance.now(); const from = 0;
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / duration);
+      const e = 1 - Math.pow(1 - k, 3);
+      setCur(from + (target - from) * e);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  if (!Number.isFinite(target)) return str;
+  const shown = cur.toLocaleString('ru-RU', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return <>{shown}{m[2]}</>;
+}
+
+// Цифры прокручиваются барабаном (таймер): «01:24:09»
+export function Odometer({ value, className }) {
+  return (
+    <span className={cx('odo', className)} aria-label={value}>
+      {String(value).split('').map((ch, i) => (/\d/.test(ch) ? (
+        <span key={i} className="odo-digit" aria-hidden>
+          <span className="odo-reel" style={{ transform: `translateY(-${Number(ch) * 10}%)` }}>
+            {'0123456789'.split('').map((d) => <span key={d}>{d}</span>)}
+          </span>
+        </span>
+      ) : <span key={i} className="odo-sep" aria-hidden>{ch}</span>))}
+    </span>
+  );
+}
+
 export function PageHeader({ title, subtitle, actions, icons }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+    <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
       <div className="min-w-0">
         <div className="flex items-center gap-2.5">
-          <h1 className="text-[24px] font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-[30px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>{title}</span></span></h1>
           {icons}
         </div>
-        {subtitle && <p className="text-ink-2 text-[13.5px] mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-ink-2 text-[14px] mt-1 reveal-sub">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 reveal-sub">{actions}</div>}
     </div>
   );
 }
 
-export function Stat({ label, value, sub, icon: Icon, tone = 'default' }) {
-  const tones = { default: 'bg-canvas text-ink-2', green: 'bg-emerald-50 text-emerald-600', red: 'bg-red-50 text-red-600', amber: 'bg-amber-50 text-amber-600', violet: 'bg-violet/10 text-violet' };
-  return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-[12.5px] text-ink-2 font-medium">{label}</span>
-        {Icon && <span className={cx('size-8 rounded-xl flex items-center justify-center', tones[tone])}><Icon size={16} /></span>}
+// Карточка-показатель. featured — тёмно-зелёная (главная), to — ссылка (стрелка в круге)
+export function Stat({ label, value, sub, icon: Icon, featured, to, tone }) {
+  const body = (
+    <div className={cx('group relative h-full rounded-[22px] p-5 overflow-hidden lift',
+      featured ? 'forest-solid text-white shadow-[0_18px_36px_-20px_rgba(14,47,32,.8)]' : 'bg-panel border border-line')}>
+      <div className="flex items-start justify-between gap-3">
+        <span className={cx('text-[14px] font-semibold', featured ? 'text-white' : 'text-ink')}>{label}</span>
+        <span className={cx('arrow-btn size-9 shrink-0 rounded-full flex items-center justify-center',
+          featured ? 'bg-white text-forest' : 'border border-ink/70 text-ink')}>
+          {to ? <ArrowUpRight size={17} /> : Icon ? <Icon size={16} /> : <ArrowUpRight size={17} />}
+        </span>
       </div>
-      <div className="text-[24px] font-semibold tracking-tight mt-1.5 tabular">{value}</div>
-      {sub && <div className="text-[12px] text-ink-3 mt-0.5">{sub}</div>}
-    </Card>
+      <div className={cx('text-[40px] leading-none font-bold tracking-[-0.03em] mt-5 tabular', tone === 'red' && !featured && 'text-red-600')}><CountUp value={value} /></div>
+      {sub && <div className={cx('text-[12px] mt-3', featured ? 'text-white/75' : 'text-ink-3')}>{sub}</div>}
+    </div>
   );
+  return to ? <Link to={to} className="block h-full">{body}</Link> : body;
 }
 
 export function ConfirmButton({ onConfirm, children = 'Удалить', ...p }) {

@@ -8,7 +8,7 @@ import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
 import { TASK_STATUS, TASK_FILTERS } from '../lib/constants';
 import { fmtDate, fmtHM, todayStr, timeAgo } from '../lib/format';
-import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar } from '../components/ui';
+import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar, Segmented } from '../components/ui';
 import { ProjectFormModal } from '../components/ProjectForm';
 import { TaskFormModal, TaskDrawer, TaskStatusButton, TaskStatusPill, isOverdue } from '../components/Tasks';
 import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
@@ -105,13 +105,13 @@ export default function Projects() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[26px] font-semibold tracking-tight">Проекты</h1>
+            <h1 className="text-[30px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>Проекты</span></span></h1>
             <span title="Проект — это организация, которую вы обслуживаете. Нажмите на проект, чтобы увидеть его задачи." className="text-ink-2"><Info size={19} /></span>
             <button onClick={() => setOnlyStarred((v) => !v)} title={onlyStarred ? 'Показать все проекты' : 'Только избранные'}>
               <Star size={19} className={cx('text-ink-2', onlyStarred && 'fill-amber-400 text-amber-400')} />
             </button>
           </div>
-          <p className="text-ink-2 text-[14px] mt-1">Организации, которые вы обслуживаете, и задачи по каждой из них.</p>
+          <p className="text-ink-2 text-[14px] mt-1 reveal-sub">Организации, которые вы обслуживаете, и задачи по каждой из них.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button icon={Download} onClick={exportCsv}>Экспорт задач</Button>
@@ -132,15 +132,8 @@ export default function Projects() {
       {view !== 'time' && view !== 'gantt' && (
         <div className="flex flex-wrap items-center gap-2 mt-4">
           {view === 'list' && (
-            <div className="flex items-center gap-0.5 p-0.5 rounded-full border border-line bg-panel max-w-full overflow-x-auto">
-              {Object.entries(TASK_FILTERS).map(([k, f]) => (
-                <button key={k} onClick={() => setFilter(k)}
-                  className={cx('flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-medium transition-colors whitespace-nowrap shrink-0',
-                    filter === k ? (k === 'overdue' ? 'bg-red-600 text-white' : 'bg-ink text-white') : k === 'overdue' && filterCounts.overdue ? 'text-red-600' : 'text-ink-2 hover:text-ink')}>
-                  {f.label}<span className={cx('text-[11px] tabular', filter === k ? 'opacity-70' : 'text-ink-3')}>{filterCounts[k]}</span>
-                </button>
-              ))}
-            </div>
+            <Segmented value={filter} onChange={setFilter}
+              items={Object.entries(TASK_FILTERS).map(([k, f]) => ({ value: k, label: f.label, count: filterCounts[k], tone: k === 'overdue' ? 'red' : undefined }))} />
           )}
           <div className={cx('flex items-center gap-1.5 h-9 px-3 rounded-full border bg-panel', q ? 'border-violet/40' : 'border-line')}>
             <Search size={15} className="text-ink-3" />
@@ -174,7 +167,7 @@ export default function Projects() {
             action={<Button variant="primary" icon={Plus} onClick={() => setProjectForm({})}>Новый проект</Button>} /></Card>
         ) : view === 'list' ? (
           list.length === 0 ? <Card><Empty icon={Search} title="Ничего не найдено" text="Измените поиск или фильтр" /></Card> : (
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 stagger">
               {list.map((p) => (
                 <ProjectBlock key={p.id} p={p} c={counts[p.id] || { open: 0, in_progress: 0, overdue: 0, done: 0, total: 0 }}
                   tasks={byProject[p.id] || []} filter={filter} userMap={userMap}
@@ -211,12 +204,12 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
   const progress = c.total ? Math.round((c.done / c.total) * 100) : 0;
   const initial = p.name.replace(/[«»"]/g, '').replace(/^(ООО|АО|ИП|ПАО|ГБУ|ГУП|ФГБОУ)\s+/i, '').trim()[0] || '?';
   return (
-    <section id={`project-${p.id}`} className={cx('bg-panel rounded-2xl border transition-shadow scroll-mt-4', open ? 'border-line-strong shadow-[0_2px_10px_-4px_rgba(16,24,40,.08)]' : 'border-line')}>
+    <section id={`project-${p.id}`} className={cx('bg-panel rounded-[20px] border transition-all duration-300 scroll-mt-4 hover:shadow-[0_14px_30px_-20px_rgba(14,47,32,.35)]', open ? 'border-line-strong shadow-[0_2px_10px_-4px_rgba(16,24,40,.08)]' : 'border-line')}>
       {/* Шапка проекта */}
       <div onClick={onToggle} className="group flex flex-wrap xl:flex-nowrap items-center gap-x-4 gap-y-2 px-4 py-3.5 cursor-pointer select-none">
         <div className="flex items-center gap-3 min-w-0 flex-1 basis-[260px] xl:basis-0">
           <span className="text-ink-3">{open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
-          <span className="size-9 rounded-xl bg-brand/30 text-brand-ink font-semibold flex items-center justify-center shrink-0">{initial.toUpperCase()}</span>
+          <span className="size-9 rounded-xl bg-brand/10 text-brand font-bold flex items-center justify-center shrink-0">{initial.toUpperCase()}</span>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-[15px] font-semibold truncate">{p.name}</span>
@@ -256,7 +249,7 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
 
       {/* Задачи */}
       {open && (
-        <div className="border-t border-line">
+        <div className="border-t border-line anim-fade">
           {tasks.length === 0 ? (
             <div className="flex items-center justify-between gap-3 px-5 py-5 text-[13px] text-ink-3">
               <span className="flex items-center gap-2"><ListTodo size={16} />{c.total ? `Нет задач с фильтром «${TASK_FILTERS[filter].label}»` : 'Задач пока нет'}</span>
@@ -275,7 +268,7 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                     <th className="th">Создана</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="stagger">
                   {tasks.map((t) => {
                     const late = isOverdue(t);
                     const a = userMap[t.assignee_id];
