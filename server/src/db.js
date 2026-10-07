@@ -208,6 +208,17 @@ const MIGRATIONS = [
       PRIMARY KEY (task_id, user_id, role)
     );
     CREATE INDEX IF NOT EXISTS idx_task_members_user ON task_members(user_id);`),
+  // 5. Сессия таймера (для паузы): что учитываем и сколько уже накоплено до паузы
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS timer_sessions (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+      task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+      ticket_id INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+      description TEXT,
+      accumulated_sec INTEGER NOT NULL DEFAULT 0,
+      paused INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );`),
 ];
 
 {

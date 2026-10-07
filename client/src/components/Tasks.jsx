@@ -3,7 +3,7 @@ import {
   CheckCircle2, Circle, CircleDot, Play, Pencil, Calendar, Clock, FolderOpen, Send, Trash2, MessageSquare, Paperclip, FileText,
   Download, Square, MoreHorizontal, Plus, X, Users, RotateCcw, Pause, Lock, Timer, ChevronDown,
 } from 'lucide-react';
-import { useApp, useNow } from '../lib/store';
+import { useApp, useNow, timerSeconds } from '../lib/store';
 import { taskPerms } from '../lib/perms';
 import { api, fileUrl, fmtSize } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';
@@ -173,7 +173,7 @@ function PeopleChips({ users, ids, editable, onChange }) {
 }
 
 export function TaskDrawer({ id, onClose }) {
-  const { user, users, toast, bump, startTimer, stopTimer, timer, version } = useApp();
+  const { user, users, toast, bump, startTimer, stopTimer, pauseTimer, resumeTimer, timer, version } = useApp();
   const [t, setT] = useState(null);
   const [edit, setEdit] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
@@ -279,17 +279,21 @@ export function TaskDrawer({ id, onClose }) {
                 {t.status === 'todo' && <Button variant="primary" icon={Play} onClick={() => patch({ status: 'in_progress' })}>Взять в работу</Button>}
                 {t.status === 'in_progress' && <Button variant="primary" icon={CheckCircle2} onClick={() => patch({ status: 'done' })}>Закрыть задачу</Button>}
                 {t.status === 'todo' && <Button icon={CheckCircle2} onClick={() => patch({ status: 'done' })}>Закрыть</Button>}
-                {t.status === 'in_progress' && <Button icon={Pause} onClick={() => patch({ status: 'todo' })}>Пауза</Button>}
+                {t.status === 'in_progress' && <Button icon={RotateCcw} onClick={() => patch({ status: 'todo' })} title="Вернуть задачу в «Открыта»">Отложить</Button>}
                 {t.status === 'done' && <Button icon={RotateCcw} onClick={() => patch({ status: 'todo' })}>Возобновить</Button>}
               </>) : (
                 <span className="text-[12px] text-ink-3 inline-flex items-center gap-1.5"><Lock size={13} />Статус меняют исполнитель, постановщик или администратор</span>
               )}
               {t.status !== 'done' && (timerHere ? (
-                <button onClick={stopTimer} title="Остановить и записать в табель"
-                  className="flex items-center gap-2.5 h-10 pl-1.5 pr-4 rounded-full forest-pattern text-white font-semibold text-[14px] shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110">
-                  <span className="relative size-7 rounded-full bg-red-500 flex items-center justify-center"><span className="absolute inset-0 rounded-full bg-red-500/60 animate-ping" /><Square size={11} fill="currentColor" className="relative" /></span>
-                  <Odometer value={fmtHMS((now - new Date(timer.started_at)) / 1000)} />
-                </button>
+                <div className="flex items-center gap-1 h-10 pl-1.5 pr-1.5 rounded-full forest-pattern text-white shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)]">
+                  <button onClick={timer.paused ? resumeTimer : pauseTimer} title={timer.paused ? 'Продолжить' : 'Пауза'}
+                    className="size-7 rounded-full bg-white text-forest flex items-center justify-center hover:scale-105 transition-transform">
+                    {timer.paused ? <Play size={12} fill="currentColor" className="ml-0.5" /> : <Pause size={12} fill="currentColor" />}
+                  </button>
+                  <Odometer value={fmtHMS(timerSeconds(timer, now))} className={cx('px-2 font-semibold text-[14px]', timer.paused && 'animate-pulse')} />
+                  <button onClick={stopTimer} title="Остановить и записать в табель"
+                    className="size-7 rounded-full bg-red-500 flex items-center justify-center hover:scale-105 transition-transform"><Square size={10} fill="currentColor" /></button>
+                </div>
               ) : (
                 <Button icon={Timer} onClick={() => startTimer({ project_id: t.project_id, task_id: t.id, description: t.title })}
                   title={timer ? 'Сейчас идёт таймер по другой работе — он будет остановлен' : 'Запустить учёт времени'}>Таймер</Button>

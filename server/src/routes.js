@@ -552,8 +552,21 @@ function stopRunning(userId) {
   const end = new Date();
   const dur = Math.max(0, Math.round((end - new Date(r.started_at)) / 1000));
   run('UPDATE time_entries SET ended_at = ?, duration_sec = ? WHERE id = ?', end.toISOString(), dur, r.id);
-  return r.id;
+  return { id: r.id, dur };
 }
+
+// Таймер с паузой. Каждый отрезок между стартом/продолжением и паузой/стопом — отдельная запись в табеле;
+// timer_sessions хранит, что именно учитываем, сколько уже накоплено и стоит ли таймер на паузе.
+const SESSION_SELECT = `SELECT s.*, p.name project_name, t.title task_title, k.title ticket_title
+  FROM timer_sessions s LEFT JOIN projects p ON p.id = s.project_id LEFT JOIN tasks t ON t.id = s.task_id LEFT JOIN tickets k ON k.id = s.ticket_id`;
+function timerState(userId) {
+  const running = get(`${TIME_SELECT} WHERE e.user_id = ? AND e.ended_at IS NULL`, userId);
+  const session = get(`${SESSION_SELECT} WHERE s.user_id = ?`, userId);
+  if (running) return { ...running, paused: false, accumulated_sec: session && !session.paused ? session.accumulated_sec : 0 };
+  if (session?.paused) return { ...session, id: null, started_at: null, paused: true };
+  return null;
+}
+const sessionParams = (s) => ({ project_id: s.project_id, task_id: s.task_id, ticket_id: s.ticket_id, description: s.description });
 
 api.get('/time', wrap((req) => {
   const where = []; const params = [];
@@ -565,22 +578,53 @@ api.get('/time', wrap((req) => {
   return all(`${TIME_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY e.started_at DESC LIMIT 1000`, ...params);
 }));
 
-api.get('/time/running', wrap((req) => get(`${TIME_SELECT} WHERE e.user_id = ? AND e.ended_at IS NULL`, req.user.id) || null));
+api.get('/time/running', wrap((req) => timerState(req.user.id)));
 
 api.post('/time/start', wrap((req) => {
   const data = pick(req.body, ['project_id', 'task_id', 'ticket_id', 'description']);
   if (data.task_id && !data.project_id) data.project_id = get('SELECT project_id FROM tasks WHERE id = ?', data.task_id)?.project_id ?? null;
   if (data.ticket_id && !data.project_id) data.project_id = get('SELECT project_id FROM tickets WHERE id = ?', data.ticket_id)?.project_id ?? null;
-  const id = tx(() => {
+  tx(() => {
     stopRunning(req.user.id);
-    return insert('time_entries', { ...data, user_id: req.user.id, started_at: nowIso() });
+    run('DELETE FROM timer_sessions WHERE user_id = ?', req.user.id);
+    insert('time_entries', { ...data, user_id: req.user.id, started_at: nowIso() });
+    insert('timer_sessions', { ...data, user_id: req.user.id, accumulated_sec: 0, paused: 0 });
   });
-  return get(`${TIME_SELECT} WHERE e.id = ?`, id);
+  return timerState(req.user.id);
 }));
 
+api.post('/time/pause', wrap((req) => {
+  const state = timerState(req.user.id);
+  if (!state || state.paused) throw bad('Таймер не запущен');
+  tx(() => {
+    const stopped = stopRunning(req.user.id);
+    const has = get('SELECT user_id FROM timer_sessions WHERE user_id = ?', req.user.id);
+    if (has) run("UPDATE timer_sessions SET accumulated_sec = accumulated_sec + ?, paused = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?", stopped?.dur || 0, req.user.id);
+    else insert('timer_sessions', { user_id: req.user.id, ...sessionParams(state), accumulated_sec: stopped?.dur || 0, paused: 1 });
+  });
+  return timerState(req.user.id);
+}));
+
+api.post('/time/resume', wrap((req) => {
+  const s = get('SELECT * FROM timer_sessions WHERE user_id = ?', req.user.id);
+  if (!s?.paused) throw bad('Таймер не на паузе');
+  tx(() => {
+    insert('time_entries', { ...sessionParams(s), user_id: req.user.id, started_at: nowIso() });
+    run("UPDATE timer_sessions SET paused = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?", req.user.id);
+  });
+  return timerState(req.user.id);
+}));
+
+// Стоп: закрываем текущий отрезок и сессию. duration_sec — общее время сессии (с учётом пауз)
 api.post('/time/stop', wrap((req) => {
-  const id = stopRunning(req.user.id);
-  return id ? get(`${TIME_SELECT} WHERE e.id = ?`, id) : null;
+  const res = tx(() => {
+    const s = get('SELECT * FROM timer_sessions WHERE user_id = ?', req.user.id);
+    const stopped = stopRunning(req.user.id);
+    run('DELETE FROM timer_sessions WHERE user_id = ?', req.user.id);
+    if (!stopped && !s) return null;
+    return { id: stopped?.id ?? null, duration_sec: (s?.accumulated_sec || 0) + (stopped?.dur || 0) };
+  });
+  return res;
 }));
 
 // Ручное добавление записи

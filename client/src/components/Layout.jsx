@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Ticket, Timer, Users, Building2, Handshake, Wallet, Settings, LogOut, Search,
-  ChevronsLeft, Play, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
+  ChevronsLeft, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
 } from 'lucide-react';
-import { useApp, useLoad, useNow, useStored } from '../lib/store';
+import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
 import { Avatar, IconButton, Popover, MenuItem, Odometer, cx } from './ui';
 import { fmtHMS, timeAgo } from '../lib/format';
@@ -150,10 +150,10 @@ export default function Layout() {
 }
 
 function Topbar({ crumb, onMenu, onSearch, dash }) {
-  const { timer, stopTimer } = useApp();
+  const { timer, stopTimer, pauseTimer, resumeTimer } = useApp();
   const [startOpen, setStartOpen] = useState(false);
   const now = useNow();
-  const elapsed = timer ? (now - new Date(timer.started_at)) / 1000 : 0;
+  const elapsed = timerSeconds(timer, now);
   return (
     <header className="h-[60px] shrink-0 flex items-center gap-3 px-4 sm:px-6 border-b border-line bg-panel">
       <button onClick={onMenu} className="lg:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-canvas"><Menu size={20} /></button>
@@ -169,14 +169,18 @@ function Topbar({ crumb, onMenu, onSearch, dash }) {
         <IconButton icon={Search} title="Поиск" onClick={onSearch} className="md:hidden" />
         <NotificationsButton activity={dash?.activity} />
         {timer ? (
-          <button onClick={stopTimer} title={`${timer.project_name || timer.ticket_title || 'Таймер'} — остановить`}
-            className="flex items-center gap-2.5 h-10 pl-1.5 pr-4 rounded-full forest-pattern text-white font-semibold text-[14px] shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110 transition">
-            <span className="relative size-7 rounded-full bg-red-500 flex items-center justify-center">
-              <span className="absolute inset-0 rounded-full bg-red-500/60 animate-ping" />
-              <Square size={11} fill="currentColor" className="relative" />
-            </span>
-            <Odometer value={fmtHMS(elapsed)} />
-          </button>
+          <div className={cx('flex items-center gap-1 h-10 pl-1.5 pr-1.5 rounded-full forest-pattern text-white shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)]', timer.paused && 'opacity-90')}
+            title={timer.task_title || timer.ticket_title || timer.project_name || 'Таймер'}>
+            <button onClick={timer.paused ? resumeTimer : pauseTimer} title={timer.paused ? 'Продолжить' : 'Пауза'}
+              className="size-7 rounded-full bg-white text-forest flex items-center justify-center hover:scale-105 transition-transform">
+              {timer.paused ? <Play size={12} fill="currentColor" className="ml-0.5" /> : <Pause size={12} fill="currentColor" />}
+            </button>
+            <Odometer value={fmtHMS(elapsed)} className={cx('px-2 font-semibold text-[14px]', timer.paused && 'animate-pulse')} />
+            <button onClick={stopTimer} title="Остановить и записать в табель"
+              className="size-7 rounded-full bg-red-500 flex items-center justify-center hover:scale-105 transition-transform">
+              <Square size={10} fill="currentColor" />
+            </button>
+          </div>
         ) : (
           <button onClick={() => setStartOpen(true)}
             className="flex items-center gap-2 h-10 pl-1.5 pr-4 rounded-full forest-pattern text-white font-semibold text-[13.5px] shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110 transition">
