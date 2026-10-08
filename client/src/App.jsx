@@ -13,6 +13,7 @@ import Clients from './pages/Clients';
 import Pipeline from './pages/Pipeline';
 import Finance from './pages/Finance';
 import Settings from './pages/Settings';
+import Calendar from './pages/Calendar';
 
 function Gate() {
   const { user, isManager } = useApp();
@@ -24,6 +25,7 @@ function Gate() {
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
         <Route path="tickets" element={<Tickets />} />
+        <Route path="calendar" element={<Calendar />} />
         <Route path="time" element={<TimeTracker />} />
         <Route path="team" element={<Team />} />
         <Route path="clients" element={<Clients />} />
