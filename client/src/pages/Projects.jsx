@@ -24,6 +24,7 @@ export default function Projects() {
   const [starred, setStarred] = useStored('crm.starred', []);
   const [q, setQ] = useState('');
   const [emp, setEmp] = useState(null);
+  const [kProject, setKProject] = useStored('crm.kanban.project', null); // фильтр канбана по проекту
   const [onlyStarred, setOnlyStarred] = useState(false);
   const [taskId, setTaskId] = useState(null);
   const [taskForm, setTaskForm] = useState(null);      // { projectId } | null
@@ -161,6 +162,22 @@ export default function Projects() {
               {users.filter((u) => u.active).map((u) => <MenuItem key={u.id} checked={emp === u.id} onClick={() => { setEmp(u.id); close(); }}>{u.name}</MenuItem>)}
             </>)}
           </Popover>
+          {view === 'kanban' && (
+            <Popover width={260} trigger={({ toggle: t }) => {
+              const kp = projects.find((p) => p.id === kProject);
+              return (
+                <button className={cx('chip', kp && 'chip-active')} onClick={t}>
+                  <FolderKanban size={15} />{kp ? kp.name : 'Проект'}
+                  {kp && <X size={13} className="text-ink-3 -mr-1" onClick={(e) => { e.stopPropagation(); setKProject(null); }} />}
+                </button>
+              );
+            }}>
+              {({ close }) => (<>
+                <MenuItem checked={!kProject} onClick={() => { setKProject(null); close(); }}>Все проекты</MenuItem>
+                {projects.map((p) => <MenuItem key={p.id} checked={kProject === p.id} onClick={() => { setKProject(p.id); close(); }}>{p.name}</MenuItem>)}
+              </>)}
+            </Popover>
+          )}
           {view === 'list' && (
             <div className="ml-auto flex items-center gap-1">
               <button className="chip" onClick={() => setExpanded(list.map((p) => p.id))} title="Развернуть все"><ChevronsUpDown size={15} />Развернуть</button>
@@ -191,7 +208,7 @@ export default function Projects() {
             </div>
           )
         ) : view === 'kanban' ? (
-          <TaskKanban onMove={moveTask} tasks={tasks.filter((t) => (!emp || t.assignee_id === emp) && (!ql || `${t.title} ${t.description || ''} ${t.project_name}`.toLowerCase().includes(ql)))}
+          <TaskKanban onMove={moveTask} tasks={tasks.filter((t) => (!emp || t.assignee_id === emp) && (!kProject || t.project_id === kProject) && (!ql || `${t.title} ${t.description || ''} ${t.project_name}`.toLowerCase().includes(ql)))}
             userMap={userMap} onOpen={setTaskId} onPatch={patchTask} />
         ) : view === 'gantt' ? (
           <ProjectGantt projects={projects} onOpen={(id) => { setView('list'); setExpanded((e) => [...new Set([...e, id])]); }} />
