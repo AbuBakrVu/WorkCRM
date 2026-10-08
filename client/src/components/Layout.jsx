@@ -9,6 +9,7 @@ import { api } from '../lib/api';
 import { Avatar, IconButton, Popover, MenuItem, Odometer, cx } from './ui';
 import { fmtHMS, timeAgo } from '../lib/format';
 import { TimerStartModal } from './TimerStart';
+import { WorkReportModal } from './WorkReport';
 import { ROLES, PROJECT_STATUS, TICKET_STATUS, DEAL_STAGE } from '../lib/constants';
 
 const NAV = [
@@ -145,12 +146,15 @@ export default function Layout() {
         </main>
       </div>
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <WorkReportModal />
     </div>
   );
 }
 
 function Topbar({ crumb, onMenu, onSearch, dash }) {
-  const { timer, stopTimer, pauseTimer, resumeTimer } = useApp();
+  const { timer, stopTimer: rawStop, pauseTimer, resumeTimer, askWork } = useApp();
+  // Таймер по задаче останавливаем через отчёт «Приостановить задачу»
+  const stopTimer = () => (timer?.task_id ? askWork({ id: timer.task_id, title: timer.task_title }, 'pause') : rawStop());
   const [startOpen, setStartOpen] = useState(false);
   const now = useNow();
   const elapsed = timerSeconds(timer, now);

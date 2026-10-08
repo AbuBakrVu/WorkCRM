@@ -67,13 +67,35 @@ export function AppProvider({ children }) {
     } catch (e) { toast(e.message, 'error'); }
   }, [toast, bump]);
 
+  // ----- Рабочий цикл задачи: «Взять в работу» → «Приостановить» / «Закрыть» (с отчётом) -----
+  const [work, setWork] = useState(null); // { task: {id, title, ...}, action: 'pause' | 'close' } — открыто окно отчёта
+  const startWork = useCallback(async (task) => {
+    try {
+      const r = await api.post(`/tasks/${task.id}/work`, { action: 'start' });
+      setTimer(r.timer);
+      toast(timer && timer.task_id !== task.id ? 'Задача в работе. Таймер переключён на неё' : 'Задача в работе, время пошло');
+      bump();
+      return r.task;
+    } catch (e) { toast(e.message, 'error'); return null; }
+  }, [toast, bump, timer]);
+  const askWork = useCallback((task, action) => setWork({ task, action }), []);
+  const finishWork = useCallback(async (taskId, action, note) => {
+    const r = await api.post(`/tasks/${taskId}/work`, { action, note });
+    setTimer(r.timer);
+    const sec = r.worked_sec || 0;
+    const hms = [Math.floor(sec / 3600), Math.floor((sec % 3600) / 60), sec % 60].map((n) => String(n).padStart(2, '0')).join(':');
+    toast(`${action === 'close' ? 'Задача закрыта' : 'Задача приостановлена'}${sec ? ` · ${hms} в табель` : ''}`);
+    setWork(null); bump();
+    return r.task;
+  }, [toast, bump]);
+
   const logout = async () => { await api.post('/auth/logout'); setUser(null); };
 
   const isManager = user && ['admin', 'manager'].includes(user.role);
   const userById = (id) => users.find((u) => u.id === id);
 
   return (
-    <AppCtx.Provider value={{ user, setUser, users, clients, projects, timer, startTimer, stopTimer, pauseTimer, resumeTimer, toast, toasts,
+    <AppCtx.Provider value={{ user, setUser, users, clients, projects, timer, startTimer, stopTimer, pauseTimer, resumeTimer, work, setWork, startWork, askWork, finishWork, toast, toasts,
       bump, version, logout, isManager, userById, loadRefs }}>
       {children}
     </AppCtx.Provider>

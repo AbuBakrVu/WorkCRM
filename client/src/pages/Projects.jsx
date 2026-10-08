@@ -10,11 +10,11 @@ import { TASK_STATUS, TASK_FILTERS } from '../lib/constants';
 import { fmtDate, fmtHM, todayStr, timeAgo } from '../lib/format';
 import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar, Segmented } from '../components/ui';
 import { ProjectFormModal } from '../components/ProjectForm';
-import { TaskFormModal, TaskDrawer, TaskStatusButton, TaskStatusPill, isOverdue } from '../components/Tasks';
+import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskStatusPill, TaskWorkActions, isOverdue } from '../components/Tasks';
 import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
 
 export default function Projects() {
-  const { users, bump, toast, startTimer } = useApp();
+  const { users, bump, toast, startTimer, startWork, askWork } = useApp();
   const { data: projectsData, loading } = useLoad('/projects');
   const { data: tasksData, setData: setTasks } = useLoad('/tasks');
   const [params, setParams] = useSearchParams();
@@ -87,6 +87,16 @@ export default function Projects() {
   const patchTask = async (id, body) => {
     setTasks((d) => d.map((t) => (t.id === id ? { ...t, ...body } : t)));
     try { await api.put(`/tasks/${id}`, body); bump(); } catch (e) { toast(e.message, 'error'); bump(); }
+  };
+
+  // Перемещение в канбане — через рабочий цикл: «В работу» запускает время, выход из работы — с отчётом
+  const moveTask = (id, status) => {
+    const t = tasks.find((x) => x.id === id);
+    if (!t || t.status === status) return;
+    if (status === 'in_progress') return startWork(t);
+    if (status === 'done') return askWork(t, 'close');
+    if (t.status === 'in_progress') return askWork(t, 'pause');
+    return patchTask(id, { status });
   };
 
   const exportCsv = () => {
@@ -181,7 +191,7 @@ export default function Projects() {
             </div>
           )
         ) : view === 'kanban' ? (
-          <TaskKanban tasks={tasks.filter((t) => (!emp || t.assignee_id === emp) && (!ql || `${t.title} ${t.description || ''} ${t.project_name}`.toLowerCase().includes(ql)))}
+          <TaskKanban onMove={moveTask} tasks={tasks.filter((t) => (!emp || t.assignee_id === emp) && (!ql || `${t.title} ${t.description || ''} ${t.project_name}`.toLowerCase().includes(ql)))}
             userMap={userMap} onOpen={setTaskId} onPatch={patchTask} />
         ) : view === 'gantt' ? (
           <ProjectGantt projects={projects} onOpen={(id) => { setView('list'); setExpanded((e) => [...new Set([...e, id])]); }} />
@@ -266,6 +276,7 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                     <th className="th">Исполнитель</th>
                     <th className="th">Срок</th>
                     <th className="th">Создана</th>
+                    <th className="th text-right">Работа</th>
                   </tr>
                 </thead>
                 <tbody className="stagger">
@@ -274,7 +285,7 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                     const a = userMap[t.assignee_id];
                     return (
                       <tr key={t.id} onClick={() => onOpenTask(t.id)} className="border-b border-line last:border-0 hover:bg-canvas/50 cursor-pointer">
-                        <td className="td pr-0"><TaskStatusButton task={t} onChange={(s) => onPatchTask(t.id, { status: s })} /></td>
+                        <td className="td pr-0"><TaskStatusIcon status={t.status} /></td>
                         <td className="td whitespace-normal">
                           <div className={cx('text-[13.5px] font-[450]', t.status === 'done' ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</div>
                           {t.description && <div className="text-[12px] text-ink-3 line-clamp-1 max-w-[560px]">{t.description}</div>}
@@ -282,15 +293,7 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                             <span className="inline-flex items-center gap-1 mt-0.5 text-[11.5px] text-violet font-medium"><MessageSquare size={12} />{t.comments_count}</span>
                           )}
                         </td>
-                        <td className="td" onClick={(e) => e.stopPropagation()}>
-                          <Popover width={180} trigger={({ toggle }) => <button onClick={toggle}><TaskStatusPill status={t.status} /></button>}>
-                            {({ close }) => Object.entries(TASK_STATUS).map(([k, s]) => (
-                              <MenuItem key={k} checked={k === t.status} onClick={() => { onPatchTask(t.id, { status: k }); close(); }}>
-                                <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full" style={{ background: s.color }} />{s.label}</span>
-                              </MenuItem>
-                            ))}
-                          </Popover>
-                        </td>
+                        <td className="td"><TaskStatusPill status={t.status} /></td>
                         <td className="td">
                           <span className="flex items-center gap-2">{a ? <><Avatar user={a} size={22} ring={false} />{a.name.split(' ')[0]}</> : <span className="text-ink-3">—</span>}</span>
                         </td>
@@ -298,6 +301,7 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                           {t.due_date ? <span className="inline-flex items-center gap-1.5"><Calendar size={13} className={late ? '' : 'text-ink-3'} />{fmtDate(t.due_date)}</span> : <span className="text-ink-3">—</span>}
                         </td>
                         <td className="td text-ink-3 text-[12px]">{timeAgo(t.created_at)}</td>
+                        <td className="td text-right"><TaskWorkActions task={t} /></td>
                       </tr>
                     );
                   })}

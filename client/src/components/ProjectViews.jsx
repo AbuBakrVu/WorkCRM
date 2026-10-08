@@ -19,7 +19,7 @@ function dueLabel(d, today) {
   return { text: `через ${days} дн`, soon: days <= 3 };
 }
 
-export function TaskKanban({ tasks, userMap, onOpen, onPatch }) {
+export function TaskKanban({ tasks, userMap, onOpen, onPatch, onMove }) {
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
   const today = toDateStr(new Date());
@@ -31,7 +31,7 @@ export function TaskKanban({ tasks, userMap, onOpen, onPatch }) {
           <div key={status}
             onDragOver={(e) => { e.preventDefault(); setOver(status); }}
             onDragLeave={() => setOver(null)}
-            onDrop={() => { if (dragId) onPatch(dragId, { status }); setDragId(null); setOver(null); }}
+            onDrop={() => { if (dragId) (onMove ? onMove(dragId, status) : onPatch(dragId, { status })); setDragId(null); setOver(null); }}
             className={cx('w-[320px] shrink-0 rounded-[22px] border p-2.5 transition-colors duration-300', over === status ? 'bg-brand/[.06] border-brand/40' : 'bg-panel/60 border-line')}>
             <div className="flex items-center justify-between px-2 pt-1 pb-3">
               <span className="inline-flex items-center gap-2 text-[14px] font-semibold"><span className="size-2.5 rounded-full" style={{ background: s.color }} />{s.label}</span>

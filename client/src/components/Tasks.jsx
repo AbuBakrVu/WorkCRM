@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2, Circle, CircleDot, Play, Pencil, Calendar, Clock, FolderOpen, Send, Trash2, MessageSquare, Paperclip, FileText,
-  Download, Square, MoreHorizontal, Plus, X, Users, RotateCcw, Pause, Lock, Timer, ChevronDown,
+  Download, Square, MoreHorizontal, Plus, X, Users, RotateCcw, Pause, PauseCircle, Lock, Timer, ChevronDown,
 } from 'lucide-react';
 import { useApp, useNow, timerSeconds } from '../lib/store';
 import { taskPerms } from '../lib/perms';
@@ -35,6 +35,45 @@ export function TaskStatusPill({ status }) {
     <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[12px] font-medium bg-canvas border border-line text-ink-2 whitespace-nowrap">
       <span className="size-2 rounded-full" style={{ background: s.color }} />{s.label}
     </span>
+  );
+}
+
+export function TaskStatusIcon({ status, size = 18 }) {
+  const Icon = status === 'done' ? CheckCircle2 : status === 'in_progress' ? CircleDot : Circle;
+  return <Icon size={size} className={cx('shrink-0', status === 'done' ? 'text-emerald-500' : status === 'in_progress' ? 'text-amber-500' : 'text-ink-3')} />;
+}
+
+function WorkClockChip({ timer }) {
+  const now = useNow();
+  return (
+    <span className="inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-full forest-pattern text-white text-[12px] font-semibold" title={timer.paused ? 'Таймер на паузе' : 'Идёт учёт времени'}>
+      <span className={cx('size-1.5 rounded-full', timer.paused ? 'bg-amber-300' : 'bg-red-400 animate-pulse')} />
+      <Odometer value={fmtHMS(timerSeconds(timer, now))} />
+    </span>
+  );
+}
+
+// Кнопки работы с задачей прямо в списке: «Взять в работу» → время → «Приостановить» / «Закрыть»
+export function TaskWorkActions({ task: t, onStarted }) {
+  const { user, timer, startWork, askWork } = useApp();
+  if (!taskPerms(user, t).status || t.status === 'done') return null;
+  const timerHere = timer && timer.task_id === t.id;
+  const stop = (e) => e.stopPropagation();
+  const start = async (e) => { stop(e); const nt = await startWork(t); if (nt) onStarted?.(nt); };
+  if (t.status === 'todo') {
+    return (
+      <button onClick={start} className="inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-brand text-white text-[12.5px] font-semibold hover:bg-brand-strong transition-colors whitespace-nowrap">
+        <Play size={12} fill="currentColor" />Взять в работу
+      </button>
+    );
+  }
+  return (
+    <div className="inline-flex items-center gap-1.5" onClick={stop}>
+      {timerHere ? <WorkClockChip timer={timer} />
+        : <button onClick={start} title="Продолжить работу (запустить время)" className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full border border-brand/40 text-brand text-[12px] font-semibold hover:bg-brand/5"><Play size={11} fill="currentColor" />Продолжить</button>}
+      <button onClick={() => askWork(t, 'pause')} title="Приостановить (с отчётом)" className="size-8 rounded-full border border-line hover:bg-amber-50 hover:border-amber-300 text-amber-600 flex items-center justify-center"><PauseCircle size={16} /></button>
+      <button onClick={() => askWork(t, 'close')} title="Закрыть задачу (с итогом)" className="size-8 rounded-full border border-line hover:bg-brand/5 hover:border-brand/40 text-brand flex items-center justify-center"><CheckCircle2 size={16} /></button>
+    </div>
   );
 }
 
@@ -173,7 +212,7 @@ function PeopleChips({ users, ids, editable, onChange }) {
 }
 
 export function TaskDrawer({ id, onClose }) {
-  const { user, users, toast, bump, startTimer, stopTimer, pauseTimer, resumeTimer, timer, version } = useApp();
+  const { user, users, toast, bump, pauseTimer, resumeTimer, timer, version, startWork, askWork } = useApp();
   const [t, setT] = useState(null);
   const [edit, setEdit] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
@@ -201,6 +240,7 @@ export function TaskDrawer({ id, onClose }) {
   };
 
   const timerHere = timer && t && timer.task_id === t.id;
+  const startHere = async () => { const nt = await startWork(t); if (nt) setT(nt); };
   const late = t && isOverdue(t) && overdueText(t.due_date);
   const participants = t ? [...new Set([t.created_by, t.assignee_id, ...t.coassignee_ids, ...t.observer_ids].filter(Boolean))].map(userBy).filter(Boolean) : [];
   const creator = t && (userBy(t.created_by) || (t.creator_name && { name: t.creator_name, color: t.creator_color }));
@@ -276,28 +316,27 @@ export function TaskDrawer({ id, onClose }) {
             {/* Действия */}
             <div className="shrink-0 flex flex-wrap items-center gap-2 px-4 py-3 bg-panel border-t border-line">
               {perms.status ? (<>
-                {t.status === 'todo' && <Button variant="primary" icon={Play} onClick={() => patch({ status: 'in_progress' })}>Взять в работу</Button>}
-                {t.status === 'in_progress' && <Button variant="primary" icon={CheckCircle2} onClick={() => patch({ status: 'done' })}>Закрыть задачу</Button>}
-                {t.status === 'todo' && <Button icon={CheckCircle2} onClick={() => patch({ status: 'done' })}>Закрыть</Button>}
-                {t.status === 'in_progress' && <Button icon={RotateCcw} onClick={() => patch({ status: 'todo' })} title="Вернуть задачу в «Открыта»">Отложить</Button>}
-                {t.status === 'done' && <Button icon={RotateCcw} onClick={() => patch({ status: 'todo' })}>Возобновить</Button>}
+                {t.status === 'todo' && <>
+                  <Button variant="primary" size="lg" icon={Play} onClick={startHere}>Взять в работу</Button>
+                  <Button size="lg" icon={CheckCircle2} onClick={() => askWork(t, 'close')} title="Закрыть без работы (например, дубликат)">Закрыть</Button>
+                </>}
+                {t.status === 'in_progress' && <>
+                  {timerHere ? (
+                    <button onClick={timer.paused ? resumeTimer : pauseTimer} title={timer.paused ? 'Таймер на паузе — продолжить' : 'Короткий перерыв (пауза таймера)'}
+                      className="flex items-center gap-2 h-10 pl-3 pr-4 rounded-full forest-pattern text-white font-semibold shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110">
+                      <span className={cx('size-2 rounded-full', timer.paused ? 'bg-amber-300' : 'bg-red-400 animate-pulse')} />
+                      <Odometer value={fmtHMS(timerSeconds(timer, now))} className={cx('text-[14px]', timer.paused && 'opacity-70')} />
+                    </button>
+                  ) : (
+                    <Button variant="primary" size="lg" icon={Play} onClick={startHere} title="Время по задаче сейчас не идёт">Продолжить работу</Button>
+                  )}
+                  <Button size="lg" icon={PauseCircle} onClick={() => askWork(t, 'pause')}>Приостановить</Button>
+                  <Button variant={timerHere ? 'primary' : 'default'} size="lg" icon={CheckCircle2} onClick={() => askWork(t, 'close')}>Закрыть задачу</Button>
+                </>}
+                {t.status === 'done' && <Button size="lg" icon={RotateCcw} onClick={() => patch({ status: 'todo' })}>Возобновить</Button>}
               </>) : (
-                <span className="text-[12px] text-ink-3 inline-flex items-center gap-1.5"><Lock size={13} />Статус меняют исполнитель, постановщик или администратор</span>
+                <span className="text-[12px] text-ink-3 inline-flex items-center gap-1.5"><Lock size={13} />Работать с задачей могут исполнитель, соисполнители, постановщик или администратор</span>
               )}
-              {t.status !== 'done' && (timerHere ? (
-                <div className="flex items-center gap-1 h-10 pl-1.5 pr-1.5 rounded-full forest-pattern text-white shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)]">
-                  <button onClick={timer.paused ? resumeTimer : pauseTimer} title={timer.paused ? 'Продолжить' : 'Пауза'}
-                    className="size-7 rounded-full bg-white text-forest flex items-center justify-center hover:scale-105 transition-transform">
-                    {timer.paused ? <Play size={12} fill="currentColor" className="ml-0.5" /> : <Pause size={12} fill="currentColor" />}
-                  </button>
-                  <Odometer value={fmtHMS(timerSeconds(timer, now))} className={cx('px-2 font-semibold text-[14px]', timer.paused && 'animate-pulse')} />
-                  <button onClick={stopTimer} title="Остановить и записать в табель"
-                    className="size-7 rounded-full bg-red-500 flex items-center justify-center hover:scale-105 transition-transform"><Square size={10} fill="currentColor" /></button>
-                </div>
-              ) : (
-                <Button icon={Timer} onClick={() => startTimer({ project_id: t.project_id, task_id: t.id, description: t.title })}
-                  title={timer ? 'Сейчас идёт таймер по другой работе — он будет остановлен' : 'Запустить учёт времени'}>Таймер</Button>
-              ))}
             </div>
           </div>
 
@@ -519,7 +558,24 @@ export function TaskChat({ taskId, participants = [] }) {
                   <div className="flex-1 h-px bg-line" />
                 </div>
               )}
-              {c.kind === 'system' ? (
+              {c.report ? (
+                <div className="my-3 flex justify-center">
+                  <div className={cx('w-full max-w-[560px] rounded-2xl border bg-panel overflow-hidden', c.report === 'close' ? 'border-brand/30' : 'border-amber-300/60')}>
+                    <div className={cx('flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold', c.report === 'close' ? 'bg-brand/[.07] text-brand' : 'bg-amber-50 text-amber-700')}>
+                      {c.report === 'close' ? <CheckCircle2 size={16} /> : <PauseCircle size={16} />}
+                      {c.report === 'close' ? 'Задача закрыта' : 'Работа приостановлена'}
+                      {c.report_sec > 0 && <span className="ml-auto inline-flex items-center gap-1 font-medium tabular"><Clock size={13} />{fmtHMS(c.report_sec)}</span>}
+                    </div>
+                    <div className="px-4 py-3">
+                      <div className="text-[13.5px] text-ink leading-relaxed whitespace-pre-wrap break-words"><MessageText text={c.body} users={users} /></div>
+                      <div className="flex items-center gap-2 mt-2.5 text-[11.5px] text-ink-3">
+                        <Avatar user={{ name: c.user_name || '?', color: c.user_color }} size={18} ring={false} />
+                        <span className="font-medium text-ink-2">{mine ? 'Вы' : c.user_name}</span><span>· {fmtDateTime(c.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : c.kind === 'system' ? (
                 <div className="flex items-center justify-center gap-1.5 my-2 text-[12px] text-ink-3">
                   <span className="size-1.5 rounded-full bg-line-strong" />
                   <span><b className="font-medium text-ink-2">{c.user_name || 'Система'}</b> {c.body}</span>

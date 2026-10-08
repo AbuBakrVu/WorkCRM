@@ -219,6 +219,11 @@ const MIGRATIONS = [
       paused INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );`),
+  // 6. Отчёт о работе в чате задачи: report = 'pause' | 'close', report_sec — сколько времени проработано
+  (d) => {
+    addColumn(d, 'task_comments', 'report', 'TEXT');
+    addColumn(d, 'task_comments', 'report_sec', 'INTEGER');
+  },
 ];
 
 {

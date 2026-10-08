@@ -7,7 +7,8 @@ import { TimerStartModal } from './TimerStart';
 
 // Тёмно-зелёная карточка таймера: крупные «барабанные» цифры и круглые кнопки
 export function TimerCard({ className }) {
-  const { timer, stopTimer, pauseTimer, resumeTimer } = useApp();
+  const { timer, stopTimer: rawStop, pauseTimer, resumeTimer, askWork } = useApp();
+  const stopTimer = () => (timer?.task_id ? askWork({ id: timer.task_id, title: timer.task_title }, 'pause') : rawStop());
   const [startOpen, setStartOpen] = useState(false);
   const now = useNow();
   const elapsed = timerSeconds(timer, now);

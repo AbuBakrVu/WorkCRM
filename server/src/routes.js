@@ -399,6 +399,60 @@ api.post('/tasks/:id/comments', wrap((req) => {
 }));
 
 // Удалить своё сообщение (админ/менеджер — любое)
+// Рабочий цикл задачи одной кнопкой:
+//  start — «Взять в работу» / «Продолжить»: статус «В работе» + таймер на задачу
+//  pause — «Приостановить»: таймер стоп (время в табель) + статус «Открыта» + отчёт в чат
+//  close — «Закрыть задачу»: таймер стоп + статус «Закрыта» + итог в чат
+api.post('/tasks/:id/work', wrap((req) => {
+  const id = idParam(req);
+  const t = getTask(id);
+  if (!t) throw notFound();
+  if (!taskPerms(req.user, t).status) throw new HttpError(403, 'Работать с задачей могут исполнитель, соисполнители, постановщик или администратор');
+  const action = req.body?.action;
+  const note = String(req.body?.note || '').trim().slice(0, 5000);
+
+  if (action === 'start') {
+    if (t.status === 'done') throw bad('Задача закрыта. Сначала возобновите её');
+    tx(() => {
+      if (t.status !== 'in_progress') {
+        update('tasks', id, { status: 'in_progress', completed_at: null });
+        systemComment(id, req.user.id, 'взял задачу в работу');
+      }
+      stopRunning(req.user.id);
+      run('DELETE FROM timer_sessions WHERE user_id = ?', req.user.id);
+      const params = { project_id: t.project_id, task_id: id, description: t.title };
+      insert('time_entries', { ...params, user_id: req.user.id, started_at: nowIso() });
+      insert('timer_sessions', { ...params, user_id: req.user.id, accumulated_sec: 0, paused: 0 });
+    });
+    logActivity(req.user.id, 'task', id, 'start', `взял в работу задачу «${t.title}»`);
+    return { task: getTask(id), timer: timerState(req.user.id) };
+  }
+
+  if (action === 'pause' || action === 'close') {
+    if (!note) throw bad(action === 'close' ? 'Опишите, с каким итогом закрыта задача' : 'Опишите, что сделано за это время');
+    let worked = 0;
+    tx(() => {
+      // Если таймер пользователя шёл по этой задаче — останавливаем и считаем время сессии
+      const s = get('SELECT * FROM timer_sessions WHERE user_id = ?', req.user.id);
+      const running = get('SELECT * FROM time_entries WHERE user_id = ? AND ended_at IS NULL', req.user.id);
+      const mine = (s && s.task_id === id) || (running && running.task_id === id);
+      if (mine) {
+        const stopped = stopRunning(req.user.id);
+        worked = (s && s.task_id === id ? s.accumulated_sec : 0) + (stopped?.dur || 0);
+        run('DELETE FROM timer_sessions WHERE user_id = ?', req.user.id);
+        if (stopped) run('UPDATE time_entries SET description = ? WHERE id = ?', note.slice(0, 300), stopped.id);
+      }
+      const status = action === 'close' ? 'done' : 'todo';
+      if (t.status !== status) update('tasks', id, { status, completed_at: status === 'done' ? nowIso() : null });
+      insert('task_comments', { task_id: id, user_id: req.user.id, kind: 'text', body: note, report: action, report_sec: worked });
+    });
+    logActivity(req.user.id, 'task', id, action === 'close' ? 'done' : 'pause',
+      `${action === 'close' ? 'закрыл' : 'приостановил'} задачу «${t.title}»`);
+    return { task: getTask(id), timer: timerState(req.user.id), worked_sec: worked };
+  }
+  throw bad('Неизвестное действие');
+}));
+
 api.delete('/task-comments/:id', wrap((req) => {
   const c = get('SELECT * FROM task_comments WHERE id = ?', idParam(req));
   if (!c) throw notFound();
