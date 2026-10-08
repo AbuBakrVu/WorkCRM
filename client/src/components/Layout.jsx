@@ -215,7 +215,7 @@ function NotificationsButton({ activity }) {
       <div className="max-h-96 overflow-y-auto">
         {(activity || []).map((a) => (
           <div key={a.id} className="flex gap-2.5 px-2.5 py-2 rounded-lg hover:bg-canvas">
-            <Avatar user={{ name: a.user_name || '?', color: a.user_color }} size={26} ring={false} />
+            <Avatar user={{ name: a.user_name || 'К', color: a.user_color || '#0f7d84' }} size={26} ring={false} />
             <div className="min-w-0 text-[12.5px] leading-snug">
               <span className="font-medium text-ink">{a.user_name}</span> <span className="text-ink-2">{a.text}</span>
               <div className="text-[11px] text-ink-3 mt-0.5">{timeAgo(a.created_at)}</div>

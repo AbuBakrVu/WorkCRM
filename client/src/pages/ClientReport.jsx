@@ -10,7 +10,7 @@ const long = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); r
 const hrs = (sec) => `${(Math.round((sec / 3600) * 10) / 10).toString().replace('.', ',')} ч`;
 
 // Печатная форма «Отчёт о выполненных работах» — открывается отдельной вкладкой, печать / PDF через браузер
-export default function ClientReport() {
+export default function ClientReport({ portal = false }) {
   const [params] = useSearchParams();
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
@@ -21,8 +21,8 @@ export default function ClientReport() {
       q.set('contract_id', q.get('contract')); q.set('from', `${q.get('month')}-01`);
       q.set('to', `${q.get('month')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`);
     }
-    api.get(`/reports/client?${q}`).then(setD).catch((e) => setErr(e.message));
-  }, [params]);
+    api.get(`${portal ? '/portal/report' : '/reports/client'}?${q}`).then(setD).catch((e) => setErr(e.message));
+  }, [params, portal]);
   useEffect(() => { if (d) document.title = `Отчёт ${d.client?.name || d.project?.name || ''} ${long(d.from)} — ${long(d.to)}`; }, [d]);
   if (err) return <div className="p-10 text-red-600">{err}</div>;
   if (!d) return <Spinner />;

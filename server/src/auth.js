@@ -40,8 +40,8 @@ const TTL_DAYS = 14;
 export const hashPassword = (p) => bcrypt.hashSync(p, 10);
 export const checkPassword = (p, h) => bcrypt.compareSync(p, h);
 
-export function issueToken(res, user) {
-  const token = jwt.sign({ uid: user.id }, SECRET, { expiresIn: `${TTL_DAYS}d` });
+export function issueToken(res, user, portal = false) {
+  const token = jwt.sign(portal ? { pid: user.id } : { uid: user.id }, SECRET, { expiresIn: `${TTL_DAYS}d` });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -61,7 +61,13 @@ export function requireAuth(req, res, next) {
   const token = req.cookies?.[COOKIE];
   if (!token) return res.status(401).json({ error: 'Требуется вход' });
   try {
-    const { uid } = jwt.verify(token, SECRET);
+    const { uid, pid } = jwt.verify(token, SECRET);
+    if (pid) { // сотрудник клиента — только личный кабинет
+      const p = get(`SELECT p.*, c.name client_name FROM portal_users p JOIN clients c ON c.id = p.client_id WHERE p.id = ? AND p.active = 1`, pid);
+      if (!p) return res.status(401).json({ error: 'Пользователь не найден' });
+      req.portal = publicUser(p);
+      return next();
+    }
     const user = get('SELECT * FROM users WHERE id = ? AND active = 1', uid);
     if (!user) return res.status(401).json({ error: 'Пользователь не найден' });
     req.user = publicUser(user);

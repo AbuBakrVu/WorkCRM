@@ -12,6 +12,8 @@ export function AppProvider({ children }) {
   const [timer, setTimer] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [version, setVersion] = useState(0); // счётчик «что-то изменилось» для перезагрузки страниц
+  const userRef = useRef(null);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   const toast = useCallback((text, kind = 'ok') => {
     const id = Math.random();
@@ -24,13 +26,13 @@ export function AppProvider({ children }) {
     setUsers(u); setClients(c); setProjects(p); setTimer(t);
   }, []);
 
-  const bump = useCallback(() => { setVersion((v) => v + 1); loadRefs().catch(() => {}); }, [loadRefs]);
+  const bump = useCallback(() => { setVersion((v) => v + 1); if (!userRef.current?.portal) loadRefs().catch(() => {}); }, [loadRefs]);
 
   useEffect(() => {
     setUnauthorizedHandler(() => setUser(null));
     api.get('/auth/me').then(setUser).catch(() => setUser(null));
   }, []);
-  useEffect(() => { if (user) loadRefs().catch(() => {}); }, [user, loadRefs]);
+  useEffect(() => { if (user && !user.portal) loadRefs().catch(() => {}); }, [user, loadRefs]);
 
   // Тот же объект учёта, что и у текущего таймера?
   const sameTarget = (t, p) => !!t && (p.task_id ? t.task_id === p.task_id

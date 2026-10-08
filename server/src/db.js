@@ -482,6 +482,23 @@ const MIGRATIONS = [
     );`);
     addColumn(d, 'tickets', 'asset_id', 'INTEGER REFERENCES assets(id) ON DELETE SET NULL');
   },
+  // 16. Личный кабинет клиента: отдельные учётные записи сотрудников клиента
+  (d) => {
+    d.exec(`CREATE TABLE IF NOT EXISTS portal_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      password_hash TEXT NOT NULL,
+      phone TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      last_login_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`);
+    addColumn(d, 'tickets', 'portal_user_id', 'INTEGER REFERENCES portal_users(id) ON DELETE SET NULL');
+    addColumn(d, 'ticket_comments', 'portal_user_id', 'INTEGER REFERENCES portal_users(id) ON DELETE SET NULL');
+    addColumn(d, 'ticket_comments', 'internal', 'INTEGER NOT NULL DEFAULT 0');
+  },
 ];
 
 {

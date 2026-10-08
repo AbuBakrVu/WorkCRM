@@ -20,11 +20,18 @@ import Reports from './pages/Reports';
 import Assets from './pages/Assets';
 import Kb from './pages/Kb';
 import ClientReport from './pages/ClientReport';
+import Portal from './pages/Portal';
 
 function Gate() {
   const { user, isManager } = useApp();
   if (user === undefined) return <div className="h-full flex items-center justify-center"><Spinner /></div>;
   if (!user) return <Login />;
+  if (user.portal) return (
+    <Routes>
+      <Route path="report/client" element={<ClientReport portal />} />
+      <Route path="*" element={<Portal />} />
+    </Routes>
+  );
   return (
     <Routes>
       {isManager && <Route path="report/client" element={<ClientReport />} />}

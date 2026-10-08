@@ -264,6 +264,7 @@ function TicketDrawer({ id, onClose }) {
   const { users, clients, projects, toast, bump, startTimer, isManager, version } = useApp();
   const [t, setT] = useState(null);
   const [comment, setComment] = useState('');
+  const [internal, setInternal] = useState(false);
   const now = useNow(30000);
   useEffect(() => { if (id) api.get(`/tickets/${id}`).then(setT).catch((e) => toast(e.message, 'error')); else setT(null); }, [id, version, toast]);
   if (!id) return null;
@@ -274,7 +275,7 @@ function TicketDrawer({ id, onClose }) {
   const send = async (e) => {
     e.preventDefault();
     if (!comment.trim()) return;
-    const c = await api.post(`/tickets/${id}/comments`, { body: comment });
+    const c = await api.post(`/tickets/${id}/comments`, { body: comment, internal });
     setT((x) => ({ ...x, comments: c })); setComment('');
   };
   const remove = async () => { await api.del(`/tickets/${id}`); toast('Заявка удалена'); bump(); onClose(); };
@@ -312,18 +313,23 @@ function TicketDrawer({ id, onClose }) {
             <div className="space-y-3">
               {t.comments.map((c) => (
                 <div key={c.id} className="flex gap-2.5">
-                  <Avatar user={{ name: c.user_name || '?', color: c.user_color }} size={28} ring={false} />
-                  <div className="flex-1 bg-canvas rounded-xl px-3 py-2">
-                    <div className="text-[12px]"><b className="font-medium">{c.user_name}</b> <span className="text-ink-3">{timeAgo(c.created_at)}</span></div>
+                  <Avatar user={{ name: c.user_name || '?', color: c.from_client ? '#0f7d84' : c.user_color }} size={28} ring={false} />
+                  <div className={cx('flex-1 rounded-xl px-3 py-2', c.internal ? 'bg-amber-50 border border-dashed border-amber-300' : c.from_client ? 'bg-[#0f7d84]/[.07]' : 'bg-canvas')}>
+                    <div className="text-[12px]"><b className="font-medium">{c.user_name}</b>
+                      {!!c.from_client && <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#0f7d84]">клиент</span>}
+                      {!!c.internal && <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-amber-600">внутренний</span>}
+                      {' '}<span className="text-ink-3">{timeAgo(c.created_at)}</span></div>
                     <div className="text-[13px] text-ink-2 mt-0.5 whitespace-pre-wrap">{c.body}</div>
                   </div>
                 </div>
               ))}
             </div>
             <form onSubmit={send} className="flex items-center gap-2 mt-3">
-              <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Написать комментарий…" />
+              <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder={internal ? 'Внутренний комментарий — клиент его не увидит' : 'Написать комментарий…'} />
               <Button variant="dark" icon={Send} type="submit">Отправить</Button>
             </form>
+            {t.client_id && <label className="flex items-center gap-2 mt-2 text-[12px] text-ink-2"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} className="accent-[var(--color-brand)]" />
+              Внутренний комментарий (не виден клиенту в личном кабинете)</label>}
           </div>
           <HistoryPanel entity="ticket" id={t.id} />
           {isManager && <div className="pt-2 border-t border-line"><ConfirmButton onConfirm={remove}>Удалить заявку</ConfirmButton></div>}
