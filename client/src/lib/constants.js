@@ -46,13 +46,16 @@ export const TICKET_CATEGORY = {
 };
 
 export const DEAL_STAGE = {
-  lead: { label: 'Лид', color: '#c7cbd4' },
-  qualified: { label: 'Квалификация', color: '#9cc6f5' },
-  proposal: { label: 'КП отправлено', color: '#b9a8f7' },
-  negotiation: { label: 'Переговоры', color: 'var(--color-st-progress)' },
-  won: { label: 'Выиграна', color: 'var(--color-st-done)' },
-  lost: { label: 'Проиграна', color: 'var(--color-st-stuck)' },
+  lead: { label: 'Лид', color: '#c7cbd4', prob: 10 },
+  qualified: { label: 'Квалификация', color: '#9cc6f5', prob: 25 },
+  proposal: { label: 'КП отправлено', color: '#b9a8f7', prob: 50 },
+  negotiation: { label: 'Переговоры', color: 'var(--color-st-progress)', prob: 75 },
+  won: { label: 'Выиграна', color: 'var(--color-st-done)', prob: 100 },
+  lost: { label: 'Проиграна', color: 'var(--color-st-stuck)', prob: 0 },
 };
+// Вероятность сделки: указанная вручную или по этапу
+export const dealProb = (d) => (d.probability ?? DEAL_STAGE[d.stage]?.prob ?? 0);
+export const LOST_REASONS = ['Дорого', 'Выбрали конкурента', 'Нет бюджета', 'Не вышли на связь', 'Проект отменён / отложен', 'Не подошли условия или сроки', 'Другое'];
 
 export const CLIENT_TYPE = { company: 'Организация', person: 'Частное лицо', internal: 'Внутренний' };
 

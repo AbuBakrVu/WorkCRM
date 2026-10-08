@@ -887,7 +887,7 @@ api.delete('/catalog/:id', requireRole('admin', 'manager'), wrap((req) => { run(
 
 /* ---------- deals (воронка) ---------- */
 const DEAL_FIELDS = ['title', 'client_id', 'amount', 'stage', 'owner_id', 'expected_close', 'notes', 'position',
-  'company_id', 'vat_mode', 'contract_no', 'contract_date'];
+  'company_id', 'vat_mode', 'contract_no', 'contract_date', 'lost_reason', 'lost_comment', 'probability'];
 const DEAL_SELECT = `SELECT d.*, c.name client_name, u.name owner_name, u.color owner_color, co.name company_name,
     (SELECT COUNT(*) FROM deal_items i WHERE i.deal_id = d.id) items_count
   FROM deals d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN users u ON u.id = d.owner_id LEFT JOIN companies co ON co.id = d.company_id`;
@@ -929,7 +929,17 @@ function saveItems(dealId, items, mode) {
   clean.forEach((it, i) => insert('deal_items', { deal_id: dealId, position: i, ...it }));
   if (clean.length) update('deals', dealId, { amount: calcItems(clean, mode).total });
 }
-const checkDeal = (data) => { if (data.vat_mode && !['above', 'included'].includes(data.vat_mode)) throw bad('Неверный режим НДС'); };
+const checkDeal = (data) => {
+  if (data.vat_mode && !['above', 'included'].includes(data.vat_mode)) throw bad('Неверный режим НДС');
+  if (data.probability != null) data.probability = Math.min(100, Math.max(0, Math.round(Number(data.probability)) || 0));
+};
+// При переходе в «Выиграна/Проиграна» — дата закрытия; при проигрыше нужна причина
+function dealStageSide(data, before = {}) {
+  if (!data.stage || data.stage === before.stage) return;
+  if (['won', 'lost'].includes(data.stage)) data.closed_at = todayMsk();
+  else { data.closed_at = null; data.lost_reason = null; data.lost_comment = null; }
+  if (data.stage === 'lost' && !(data.lost_reason || before.lost_reason)) throw bad('Укажите причину проигрыша');
+}
 
 api.get('/deals', wrap(() => all(`${DEAL_SELECT} ORDER BY d.position, d.created_at DESC`)));
 api.get('/deals/:id', wrap((req) => getDeal(idParam(req)) || (() => { throw notFound(); })()));
@@ -937,6 +947,7 @@ api.post('/deals', wrap((req) => {
   const data = pick(req.body, DEAL_FIELDS);
   required(data, 'title');
   checkDeal(data);
+  dealStageSide(data);
   data.owner_id ??= req.user.id;
   data.company_id ??= get('SELECT id FROM companies ORDER BY is_default DESC, id LIMIT 1')?.id ?? null;
   const id = tx(() => {
@@ -953,6 +964,7 @@ api.put('/deals/:id', wrap((req) => {
   if (!before) throw notFound();
   const data = pick(req.body, DEAL_FIELDS);
   checkDeal(data);
+  dealStageSide(data, before);
   tx(() => {
     update('deals', id, data);
     saveItems(id, req.body.items, data.vat_mode || before.vat_mode);

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Receipt } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
-import { DEAL_STAGE, INVOICE_STATUS } from '../lib/constants';
+import { DEAL_STAGE, INVOICE_STATUS, LOST_REASONS } from '../lib/constants';
 import { fmtRub, fmtDate } from '../lib/format';
 import { ItemsEditor, badItem, itemsBody } from './ItemsEditor';
 export { calcItems } from './ItemsEditor';
@@ -41,12 +41,15 @@ export function DealModal({ deal, onClose }) {
 
   const submit = async () => {
     if (!f.title?.trim()) return toast('Укажите название сделки', 'error');
+    if (f.stage === 'lost' && !f.lost_reason) return toast('Укажите причину проигрыша', 'error');
     const bad = badItem(items);
     if (bad) return toast(bad, 'error');
     const body = {
       title: f.title, client_id: f.client_id ? +f.client_id : null, stage: f.stage, owner_id: f.owner_id ? +f.owner_id : null,
       expected_close: f.expected_close || null, notes: f.notes || null, company_id: f.company_id ? +f.company_id : null,
       vat_mode: f.vat_mode, contract_no: f.contract_no || null, contract_date: f.contract_date || null,
+      probability: f.probability === '' || f.probability == null ? null : +f.probability,
+      ...(f.stage === 'lost' ? { lost_reason: f.lost_reason || null, lost_comment: f.lost_comment || null } : {}),
       items: itemsBody(items),
       ...(hasItems ? {} : { amount: +f.amount || 0 }),
     };
@@ -79,6 +82,11 @@ export function DealModal({ deal, onClose }) {
             <Field label="Договор №"><input className="input" value={f.contract_no || ''} onChange={set('contract_no')} /></Field>
             <Field label="от"><input type="date" className="input" value={f.contract_date || ''} onChange={set('contract_date')} /></Field>
             <Field label="Ожидаемое закрытие"><input type="date" className="input" value={f.expected_close || ''} onChange={set('expected_close')} /></Field>
+            {!['won', 'lost'].includes(f.stage) && <Field label="Вероятность, %" hint={`По этапу — ${DEAL_STAGE[f.stage]?.prob ?? 0}%`}><input type="number" min="0" max="100" className="input" value={f.probability ?? ''} onChange={set('probability')} placeholder={String(DEAL_STAGE[f.stage]?.prob ?? '')} /></Field>}
+            {f.stage === 'lost' && (<>
+              <Field label="Причина проигрыша"><Select value={f.lost_reason} onChange={set('lost_reason')} placeholder="Выберите" options={LOST_REASONS.map((r) => ({ value: r, label: r }))} /></Field>
+              <Field label="Комментарий" className="col-span-2"><input className="input" value={f.lost_comment || ''} onChange={set('lost_comment')} /></Field>
+            </>)}
             {!hasItems && <Field label="Сумма, ₽" hint="Или добавьте позиции — сумма посчитается сама"><input type="number" min="0" className="input" value={f.amount || ''} onChange={set('amount')} /></Field>}
           </div>
 

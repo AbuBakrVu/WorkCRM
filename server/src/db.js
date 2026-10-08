@@ -385,6 +385,13 @@ const MIGRATIONS = [
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_invoice_payments ON invoice_payments(invoice_id);`),
+  // 11. Сделки: причина проигрыша, вероятность, дата закрытия
+  (d) => {
+    addColumn(d, 'deals', 'lost_reason', 'TEXT');
+    addColumn(d, 'deals', 'lost_comment', 'TEXT');
+    addColumn(d, 'deals', 'probability', 'INTEGER');
+    addColumn(d, 'deals', 'closed_at', 'TEXT');
+  },
 ];
 
 {
