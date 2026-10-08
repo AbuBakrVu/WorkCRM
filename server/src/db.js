@@ -392,6 +392,21 @@ const MIGRATIONS = [
     addColumn(d, 'deals', 'probability', 'INTEGER');
     addColumn(d, 'deals', 'closed_at', 'TEXT');
   },
+  // 12. Абонентское обслуживание: лимит часов в месяц, абонплата, ставка перерасхода
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS support_contracts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+      project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+      title TEXT,
+      hours_limit REAL NOT NULL DEFAULT 0,
+      monthly_fee REAL NOT NULL DEFAULT 0,
+      overage_rate REAL NOT NULL DEFAULT 0,
+      start_date TEXT,
+      end_date TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`),
 ];
 
 {

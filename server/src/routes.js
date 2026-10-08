@@ -1185,6 +1185,52 @@ api.put('/invoice-schedules/:id', requireRole('admin', 'manager'), wrap((req) =>
 }));
 api.delete('/invoice-schedules/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM invoice_schedules WHERE id = ?', idParam(req)); return { ok: true }; }));
 
+/* ---------- абонентское обслуживание ---------- */
+const CONTRACT_FIELDS = ['client_id', 'project_id', 'title', 'hours_limit', 'monthly_fee', 'overage_rate', 'start_date', 'end_date', 'active', 'notes'];
+const CONTRACT_SELECT = `SELECT k.*, c.name client_name, p.name project_name FROM support_contracts k
+  LEFT JOIN clients c ON c.id = k.client_id LEFT JOIN projects p ON p.id = k.project_id`;
+// Время по договору за месяц (YYYY-MM, по МСК): проекты клиента/договора + заявки клиента
+const CONTRACT_ENTRIES = `FROM time_entries e
+  LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
+  WHERE e.ended_at IS NOT NULL AND strftime('%Y-%m', datetime(e.started_at, '+3 hours')) = ?
+    AND ((? IS NOT NULL AND (e.project_id = ? OR t.project_id = ?)) OR (? IS NOT NULL AND (p.client_id = ? OR t.client_id = ?)))`;
+const contractArgs = (k, month) => [month, k.project_id, k.project_id, k.project_id, k.client_id, k.client_id, k.client_id];
+function contractUsage(k, month) {
+  const used = get(`SELECT COALESCE(SUM(e.duration_sec),0) s ${CONTRACT_ENTRIES}`, ...contractArgs(k, month)).s;
+  const usedH = used / 3600;
+  const over = Math.max(0, usedH - k.hours_limit);
+  return { month, used_sec: used, used_hours: Math.round(usedH * 100) / 100, over_hours: Math.round(over * 100) / 100,
+    over_amount: Math.round(over * k.overage_rate * 100) / 100, pct: k.hours_limit ? Math.round((usedH / k.hours_limit) * 100) : null };
+}
+const monthOf = (q) => (/^\d{4}-\d{2}$/.test(String(q || '')) ? q : todayMsk().slice(0, 7));
+api.get('/contracts', wrap((req) => {
+  const month = monthOf(req.query.month);
+  return all(`${CONTRACT_SELECT} ORDER BY k.active DESC, c.name`).map((k) => ({ ...k, usage: contractUsage(k, month) }));
+}));
+api.get('/contracts/:id', wrap((req) => {
+  const k = get(`${CONTRACT_SELECT} WHERE k.id = ?`, idParam(req));
+  if (!k) throw notFound();
+  const month = monthOf(req.query.month);
+  const history = [];
+  const [y, m] = month.split('-').map(Number);
+  for (let i = 5; i >= 0; i--) { const d = new Date(Date.UTC(y, m - 1 - i, 1)); history.push(contractUsage(k, d.toISOString().slice(0, 7))); }
+  // Детализация за месяц: на что ушло время
+  const entries = all(`SELECT e.id, e.started_at, e.duration_sec, e.description, u.name user_name, tk.title task_title, t.title ticket_title, t.id ticket_id, p.name project_name
+    ${CONTRACT_ENTRIES.replace('LEFT JOIN tickets t', 'LEFT JOIN users u ON u.id = e.user_id LEFT JOIN tasks tk ON tk.id = e.task_id LEFT JOIN tickets t')} ORDER BY e.started_at DESC`, ...contractArgs(k, month));
+  return { ...k, usage: contractUsage(k, month), history, entries };
+}));
+api.post('/contracts', requireRole('admin', 'manager'), wrap((req) => {
+  const data = pick(req.body, CONTRACT_FIELDS);
+  if (!data.client_id && !data.project_id) throw bad('Выберите клиента или проект');
+  return get(`${CONTRACT_SELECT} WHERE k.id = ?`, insert('support_contracts', data));
+}));
+api.put('/contracts/:id', requireRole('admin', 'manager'), wrap((req) => {
+  const id = idParam(req);
+  update('support_contracts', id, pick(req.body, CONTRACT_FIELDS));
+  return get(`${CONTRACT_SELECT} WHERE k.id = ?`, id);
+}));
+api.delete('/contracts/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM support_contracts WHERE id = ?', idParam(req)); return { ok: true }; }));
+
 /* ---------- time tracking ---------- */
 const TIME_SELECT = `SELECT e.*, u.name user_name, u.color user_color, p.name project_name, t.title task_title, k.title ticket_title,
     CASE WHEN e.ended_at IS NULL THEN CAST((julianday('now') - julianday(e.started_at)) * 86400 AS INTEGER) ELSE e.duration_sec END live_sec

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Plus, Search, X, Building2, Phone, Mail, Pencil } from 'lucide-react';
-import { useApp, useLoad } from '../lib/store';
+import { Plus, Search, X, Building2, Phone, Mail, Pencil, FileClock } from 'lucide-react';
+import { useApp, useLoad, useStored } from '../lib/store';
+import { ContractsView } from '../components/Contracts';
 import { api } from '../lib/api';
 import { CLIENT_TYPE, PROJECT_STATUS, DEAL_STAGE, TICKET_STATUS, INVOICE_STATUS } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate } from '../lib/format';
 import { RequisitesFields, InnButton } from '../components/Requisites';
-import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, cx } from '../components/ui';
+import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, Tabs, cx } from '../components/ui';
 
 export default function Clients() {
   const { data, loading } = useLoad('/clients');
@@ -16,6 +17,7 @@ export default function Clients() {
   const [type, setType] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [form, setForm] = useState(null); // null | {} | client
+  const [tab, setTab] = useStored('crm.clients.tab', 'list');
 
   useEffect(() => {
     const o = params.get('open'); if (o) setOpenId(Number(o));
@@ -29,7 +31,9 @@ export default function Clients() {
   return (
     <div>
       <PageHeader title="Клиенты" subtitle="Организации и контакты: проекты, заявки, сделки и оплаты по каждому клиенту"
-        actions={<Button variant="primary" icon={Plus} onClick={() => setForm({})}>Новый клиент</Button>} />
+        actions={tab === 'list' && <Button variant="primary" icon={Plus} onClick={() => setForm({})}>Новый клиент</Button>} />
+      <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'list', label: 'Клиенты', icon: Building2 }, { value: 'contracts', label: 'Абонентское обслуживание', icon: FileClock }]} /></div>
+      {tab === 'contracts' ? <ContractsView /> : (<>
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="flex items-center gap-1.5 h-9 px-3 rounded-full border border-line bg-panel">
           <Search size={15} className="text-ink-3" />
@@ -69,6 +73,7 @@ export default function Clients() {
           </table>
         </Card>
       )}
+      </>)}
       <ClientDrawer id={openId} onClose={() => setOpenId(null)} onEdit={(c) => setForm(c)} />
       <ClientFormModal client={form} onClose={() => setForm(null)} onSaved={(c) => setOpenId(c.id)} />
     </div>
