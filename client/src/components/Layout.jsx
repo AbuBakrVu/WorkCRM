@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Ticket, Timer, Users, Building2, Handshake, Wallet, Settings, LogOut, Search,
-  Moon, Sun, CalendarDays, Package, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
+  Moon, Sun, CalendarDays, Package, Receipt, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
@@ -24,6 +24,7 @@ const NAV = [
   { section: 'Продажи', items: [
     { to: '/clients', label: 'Клиенты', icon: Building2 },
     { to: '/pipeline', label: 'Воронка сделок', icon: Handshake },
+    { to: '/invoices', label: 'Счета', icon: Receipt, manager: true, badge: 'invoices' },
     { to: '/catalog', label: 'Каталог', icon: Package },
   ] },
   { section: 'Финансы', manager: true, items: [
@@ -32,7 +33,7 @@ const NAV = [
 ];
 
 const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets': 'Заявки', '/time': 'Учёт времени', '/team': 'Команда',
-  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки', '/calendar': 'Календарь', '/catalog': 'Каталог' };
+  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки', '/calendar': 'Календарь', '/catalog': 'Каталог', '/invoices': 'Счета' };
 
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();
@@ -69,6 +70,7 @@ export default function Layout() {
       <i.icon className="sb-ico" size={22} strokeWidth={1.75} />
       <span className="sb-fade">{i.label}</span>
       {i.badge === 'tickets' && dash?.tickets?.new > 0 && <b className="sb-badge">{dash.tickets.new}</b>}
+      {i.badge === 'invoices' && dash?.invoices?.overdue > 0 && <b className="sb-badge !bg-red-500" title="Просроченные счета">{dash.invoices.overdue}</b>}
     </NavLink>
   );
 
@@ -105,7 +107,7 @@ export default function Layout() {
         {items.map((s, k) => (
           <div key={s.section} className="contents">
             {k > 0 && <div className="sb-hr" />}
-            {s.items.map(navItem)}
+            {s.items.filter((i) => !i.manager || isManager).map(navItem)}
           </div>
         ))}
         {starredProjects.length > 0 && (<>

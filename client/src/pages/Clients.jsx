@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Plus, Search, X, Building2, Phone, Mail, Pencil } from 'lucide-react';
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
-import { CLIENT_TYPE, PROJECT_STATUS, DEAL_STAGE, TICKET_STATUS } from '../lib/constants';
+import { CLIENT_TYPE, PROJECT_STATUS, DEAL_STAGE, TICKET_STATUS, INVOICE_STATUS } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate } from '../lib/format';
 import { RequisitesFields, InnButton } from '../components/Requisites';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, cx } from '../components/ui';
@@ -140,6 +140,9 @@ function ClientDrawer({ id, onClose, onEdit }) {
           <Section title="Проекты" items={c.projects} render={(p) => <><span className="flex-1 truncate">{p.name}</span><StatusDot color={PROJECT_STATUS[p.status].color} label={PROJECT_STATUS[p.status].label} /></>} />
           <Section title="Сделки" items={c.deals} render={(d) => <><span className="flex-1 truncate">{d.title}</span><span className="tabular text-ink-2 mr-3">{fmtMoney(d.amount)}</span><StatusDot color={DEAL_STAGE[d.stage].color} label={DEAL_STAGE[d.stage].label} /></>} />
           <Section title="Заявки" items={c.tickets} render={(t) => <><span className="text-ink-3 tabular w-10">#{t.id}</span><span className="flex-1 truncate">{t.title}</span><StatusDot color={TICKET_STATUS[t.status].color} label={TICKET_STATUS[t.status].label} /></>} />
+ {isManager && c.invoices && <Section title={<>Счета{c.debt > 0 && <span className="ml-2 text-[12.5px] font-medium text-amber-600">долг {fmtMoney(c.debt)}</span>}</>} items={c.invoices} render={(i) => <>
+            <Link to={`/invoices?open=${i.id}`} className="flex-1 flex items-center gap-2 min-w-0 hover:text-violet"><span className="font-semibold w-14">№ {i.number}</span><span className="text-ink-3 w-16">{fmtDate(i.date)}</span><span className="truncate">{i.title || i.deal_title || ''}</span></Link>
+            <span className="tabular text-ink-2 mr-3">{fmtMoney(i.total)}</span><StatusDot color={INVOICE_STATUS[i.status].color} label={INVOICE_STATUS[i.status].label} /></>} />}
           {isManager && <Section title="Платежи" items={c.transactions} render={(x) => <><span className="text-ink-3 w-16">{fmtDate(x.date)}</span><span className="flex-1 truncate">{x.description}</span><span className={cx('tabular', x.type === 'income' ? 'text-emerald-600' : 'text-ink-2')}>{x.type === 'income' ? '+' : '−'}{fmtMoney(x.amount)}</span></>} />}
           {isManager && <div className="pt-2 border-t border-line"><ConfirmButton onConfirm={remove}>Удалить клиента</ConfirmButton></div>}
         </div>

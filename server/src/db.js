@@ -315,6 +315,76 @@ const MIGRATIONS = [
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );`),
+  // 10. Счета: позиции, оплаты, повторяющиеся счета, нумерация документов по компаниям
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS doc_counters (
+      company_id INTEGER NOT NULL DEFAULT 0,
+      kind TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      last INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (company_id, kind, year)
+    );
+    CREATE TABLE IF NOT EXISTS invoice_schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+      client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+      deal_id INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      title TEXT,
+      items TEXT NOT NULL,
+      vat_mode TEXT NOT NULL DEFAULT 'above',
+      every INTEGER NOT NULL DEFAULT 1,
+      monthday INTEGER NOT NULL DEFAULT 1,
+      due_days INTEGER NOT NULL DEFAULT 5,
+      next_date TEXT NOT NULL,
+      end_date TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      number TEXT NOT NULL,
+      company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      deal_id INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      schedule_id INTEGER REFERENCES invoice_schedules(id) ON DELETE SET NULL,
+      date TEXT NOT NULL,
+      due_date TEXT,
+      vat_mode TEXT NOT NULL DEFAULT 'above',
+      net REAL NOT NULL DEFAULT 0,
+      vat REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL DEFAULT 0,
+      paid REAL NOT NULL DEFAULT 0,
+      paid_at TEXT,
+      cancelled INTEGER NOT NULL DEFAULT 0,
+      title TEXT,
+      notes TEXT,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_invoices_client ON invoices(client_id);
+    CREATE INDEX IF NOT EXISTS idx_invoices_deal ON invoices(deal_id);
+    CREATE TABLE IF NOT EXISTS invoice_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      name TEXT NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'шт',
+      qty REAL NOT NULL DEFAULT 1,
+      price REAL NOT NULL DEFAULT 0,
+      vat_rate TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_invoice_items ON invoice_items(invoice_id, position);
+    CREATE TABLE IF NOT EXISTS invoice_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      amount REAL NOT NULL,
+      note TEXT,
+      transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_invoice_payments ON invoice_payments(invoice_id);`),
 ];
 
 {
@@ -337,10 +407,22 @@ export const all = (sql, ...p) => db.prepare(sql).all(...p);
 export const get = (sql, ...p) => db.prepare(sql).get(...p);
 export const run = (sql, ...p) => db.prepare(sql).run(...p);
 
+// Транзакция; вложенные вызовы выполняются как точки сохранения (SAVEPOINT)
+let txDepth = 0;
 export function tx(fn) {
-  db.exec('BEGIN');
-  try { const r = fn(); db.exec('COMMIT'); return r; }
-  catch (e) { db.exec('ROLLBACK'); throw e; }
+  const sp = txDepth ? `sp${txDepth}` : null;
+  db.exec(sp ? `SAVEPOINT ${sp}` : 'BEGIN');
+  txDepth++;
+  try {
+    const r = fn();
+    txDepth--;
+    db.exec(sp ? `RELEASE ${sp}` : 'COMMIT');
+    return r;
+  } catch (e) {
+    txDepth--;
+    db.exec(sp ? `ROLLBACK TO ${sp}; RELEASE ${sp}` : 'ROLLBACK');
+    throw e;
+  }
 }
 
 export function logActivity(userId, entity, entityId, action, text) {

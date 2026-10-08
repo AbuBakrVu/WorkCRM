@@ -70,3 +70,11 @@ export const VAT_RATES = [
 ];
 export const VAT_MODE = { above: 'НДС сверху', included: 'В т.ч. НДС' };
 export const UNITS = ['шт', 'усл', 'ч', 'мес', 'компл', 'м', 'упак', 'лиц'];
+
+export const INVOICE_STATUS = {
+  issued: { label: 'Ждёт оплаты', color: 'var(--color-st-review)' },
+  partial: { label: 'Оплачен частично', color: 'var(--color-st-progress)' },
+  overdue: { label: 'Просрочен', color: 'var(--color-st-stuck)' },
+  paid: { label: 'Оплачен', color: 'var(--color-st-done)' },
+  cancelled: { label: 'Отменён', color: 'var(--color-st-planned)' },
+};
