@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Plus, Play, Square, Trash2, Download, Timer 
 import { useApp, useLoad, useNow } from '../lib/store';
 import { api } from '../lib/api';
 import { fmtHM, fmtHMS, fmtTime, fmtDate, toDateStr, parseDate, fmtHours } from '../lib/format';
-import { Button, Card, Modal, Field, Select, Avatar, Popover, MenuItem, Empty, PageHeader, Stat, cx } from '../components/ui';
+import { Button, Card, Modal, Field, Select, Avatar, Popover, MenuItem, Empty, PageHeader, Stat, cx, userOptions, nameOptions, SearchList } from '../components/ui';
 import { TimerStartModal } from '../components/TimerStart';
 import { TimerCard } from '../components/TimerCard';
 
@@ -93,8 +93,8 @@ export default function TimeTracker() {
             <button className={cx('chip', who && 'chip-active')} onClick={toggle}>{whoUser ? <><Avatar user={whoUser} size={18} ring={false} />{whoUser.name}</> : 'Вся команда'}</button>
           )}>
             {({ close }) => (<>
-              <MenuItem checked={!who} onClick={() => { setWho(null); close(); }}>Вся команда</MenuItem>
-              {users.map((u) => <MenuItem key={u.id} checked={who === u.id} onClick={() => { setWho(u.id); close(); }}>{u.name}</MenuItem>)}
+              <SearchList value={who} placeholder="Поиск сотрудника…" onEscape={close}
+                items={[{ value: null, label: 'Вся команда', muted: true }, ...userOptions(users, { all: true })]} onPick={(v) => { setWho(v); close(); }} />
             </>)}
           </Popover>
         )}
@@ -189,9 +189,9 @@ function ManualTimeModal({ open, onClose }) {
     <Modal open={open} onClose={onClose} title="Добавить время" width={520}
       footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit}>Добавить</Button></>}>
       <form onSubmit={submit} className="grid grid-cols-2 gap-3.5">
-        {isManager && <Field label="Сотрудник" className="col-span-2"><Select value={f.user_id} onChange={set('user_id')} options={users.filter((u) => u.active).map((u) => ({ value: u.id, label: u.name }))} /></Field>}
-        <Field label="Проект"><Select value={f.project_id} onChange={(v) => setF((x) => ({ ...x, project_id: v, task_id: null }))} placeholder="Без проекта" options={projects.map((p) => ({ value: p.id, label: p.name }))} /></Field>
-        <Field label="Задача"><Select value={f.task_id} onChange={set('task_id')} placeholder="—" disabled={!f.project_id} options={tasks.map((t) => ({ value: t.id, label: t.title }))} /></Field>
+        {isManager && <Field label="Сотрудник" className="col-span-2"><Select value={f.user_id} onChange={set('user_id')} search options={userOptions(users)} /></Field>}
+        <Field label="Проект"><Select value={f.project_id} onChange={(v) => setF((x) => ({ ...x, project_id: v, task_id: null }))} placeholder="Без проекта" search options={nameOptions(projects)} /></Field>
+        <Field label="Задача"><Select value={f.task_id} onChange={set('task_id')} placeholder="—" disabled={!f.project_id} search options={tasks.map((t) => ({ value: t.id, label: t.title }))} /></Field>
         <Field label="Дата"><input type="date" className="input" value={f.date || ''} onChange={(e) => set('date')(e.target.value)} /></Field>
         <Field label="Начало"><input type="time" className="input" value={f.start || ''} onChange={(e) => set('start')(e.target.value)} /></Field>
         <Field label="Часы"><input type="number" min="0" max="24" className="input" value={f.hours} onChange={(e) => set('hours')(e.target.value)} /></Field>

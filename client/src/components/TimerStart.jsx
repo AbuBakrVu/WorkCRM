@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Play } from 'lucide-react';
-import { Modal, Field, Select, Button } from './ui';
+import { Modal, Field, Select, Button, nameOptions } from './ui';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 
@@ -48,16 +48,16 @@ export function TimerStartModal({ open, onClose, preset = {} }) {
         {mode === 'project' ? (<>
           <Field label="Проект">
             <Select value={form.project_id} onChange={(v) => setForm((f) => ({ ...f, project_id: v, task_id: null }))} placeholder="Без проекта"
-              options={projects.filter((p) => p.status !== 'done').map((p) => ({ value: p.id, label: p.name }))} />
+              search options={nameOptions(projects.filter((p) => p.status !== 'done'))} />
           </Field>
           <Field label="Задача">
             <Select value={form.task_id} onChange={set('task_id')} placeholder={form.project_id ? 'Без задачи' : 'Сначала выберите проект'} disabled={!form.project_id}
-              options={tasks.map((t) => ({ value: t.id, label: t.title }))} />
+              search options={tasks.map((t) => ({ value: t.id, label: t.title }))} />
           </Field>
         </>) : (
           <Field label="Заявка">
             <Select value={form.ticket_id} onChange={set('ticket_id')} placeholder="Выберите заявку"
-              options={tickets.map((t) => ({ value: t.id, label: `#${t.id} ${t.title}` }))} />
+              search options={tickets.map((t) => ({ value: t.id, label: `#${t.id} ${t.title}` }))} />
           </Field>
         )}
         <Field label="Что делаю">

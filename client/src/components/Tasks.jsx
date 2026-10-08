@@ -8,7 +8,7 @@ import { taskPerms } from '../lib/perms';
 import { api, fileUrl, fmtSize } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
-import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx } from './ui';
+import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
 
 export const isOverdue = (t) => t.status !== 'done' && t.due_date && t.due_date < todayStr();
 
@@ -115,7 +115,7 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
       footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit} disabled={busy}>{task ? 'Сохранить' : 'Создать задачу'}</Button></>}>
       <form onSubmit={submit} className="space-y-3.5">
         <Field label="Проект (организация)">
-          <Select value={f.project_id} onChange={set('project_id')} placeholder="Выберите проект" options={projects.map((p) => ({ value: p.id, label: p.name }))} />
+          <Select value={f.project_id} onChange={set('project_id')} placeholder="Выберите проект" search options={nameOptions(projects)} />
           {err('project_id')}
         </Field>
         <Field label="Название задачи">
@@ -129,7 +129,7 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
         </Field>
         <div className="grid grid-cols-2 gap-3.5">
           <Field label="Исполнитель">
-            <Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" options={users.filter((u) => u.active).map((u) => ({ value: u.id, label: u.name }))} />
+            <Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" search options={userOptions(users)} />
           </Field>
           <Field label="Крайний срок"><input type="date" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>
           <Field label="Соисполнители"><UserPicker users={users} value={f.coassignee_ids || []} onChange={set('coassignee_ids')} /></Field>
@@ -180,10 +180,8 @@ function PersonPicker({ users, value, onChange, children }) {
     <Popover width={250} trigger={({ toggle }) => (
       <button type="button" onClick={toggle} className="inline-flex items-center gap-1 rounded-full hover:bg-canvas -ml-1.5 pl-1.5 pr-2 py-1">{children}<ChevronDown size={14} className="text-ink-3" /></button>
     )}>
-      {({ close }) => (<div className="max-h-72 overflow-y-auto">
-        <MenuItem checked={!value} onClick={() => { onChange(null); close(); }}>Не назначен</MenuItem>
-        {users.filter((u) => u.active).map((u) => <MenuItem key={u.id} checked={u.id === value} onClick={() => { onChange(u.id); close(); }}>{u.name}</MenuItem>)}
-      </div>)}
+      {({ close }) => <SearchList value={value} placeholder="Поиск сотрудника…" onEscape={close}
+        items={[{ value: null, label: 'Не назначен', muted: true }, ...userOptions(users)]} onPick={(v) => { onChange(v); close(); }} />}
     </Popover>
   );
 }
@@ -202,9 +200,8 @@ function PeopleChips({ users, ids, editable, onChange }) {
         <Popover width={250} trigger={({ toggle }) => (
           <button type="button" onClick={toggle} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full border border-dashed border-line-strong text-[12.5px] text-ink-2 hover:bg-canvas hover:text-ink"><Plus size={13} />Добавить</button>
         )}>
-          {({ close }) => (<div className="max-h-72 overflow-y-auto">
-            {users.filter((u) => u.active && !ids.includes(u.id)).map((u) => <MenuItem key={u.id} onClick={() => { onChange([...ids, u.id]); close(); }}>{u.name}</MenuItem>)}
-          </div>)}
+          {({ close }) => <SearchList placeholder="Поиск сотрудника…" onEscape={close} empty="Некого добавить"
+            items={userOptions(users).filter((o) => !ids.includes(o.value))} onPick={(id) => { onChange([...ids, id]); close(); }} />}
         </Popover>
       )}
     </div>

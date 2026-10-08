@@ -4,7 +4,7 @@ import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { DEAL_STAGE } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate, parseDate, plural } from '../lib/format';
-import { Button, Modal, Field, Select, Avatar, ConfirmButton, PageHeader, Stat, Spinner, cx } from '../components/ui';
+import { Button, Modal, Field, Select, Avatar, ConfirmButton, PageHeader, Stat, Spinner, cx, userOptions, nameOptions } from '../components/ui';
 import { Handshake, TrendingUp, Trophy } from 'lucide-react';
 
 export default function Pipeline() {
@@ -93,11 +93,11 @@ function DealModal({ deal, onClose }) {
       footer={<>{f.id && isManager && <div className="mr-auto"><ConfirmButton onConfirm={remove} /></div>}<Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit}>Сохранить</Button></>}>
       <form onSubmit={submit} className="grid grid-cols-2 gap-3.5">
         <Field label="Название" className="col-span-2"><input className="input" value={f.title || ''} onChange={set('title')} autoFocus /></Field>
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" options={clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
+        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
         <Field label="Сумма, ₽"><input type="number" min="0" className="input" value={f.amount || ''} onChange={set('amount')} /></Field>
         <Field label="Этап"><Select value={f.stage} onChange={set('stage')} options={Object.entries(DEAL_STAGE).map(([value, s]) => ({ value, label: s.label }))} /></Field>
         <Field label="Ожидаемое закрытие"><input type="date" className="input" value={f.expected_close || ''} onChange={set('expected_close')} /></Field>
-        <Field label="Ответственный" className="col-span-2"><Select value={f.owner_id} onChange={set('owner_id')} placeholder="—" options={users.filter((u) => u.active).map((u) => ({ value: u.id, label: u.name }))} /></Field>
+        <Field label="Ответственный" className="col-span-2"><Select value={f.owner_id} onChange={set('owner_id')} placeholder="—" search options={userOptions(users)} /></Field>
         <Field label="Заметки" className="col-span-2"><textarea className="input" rows={3} value={f.notes || ''} onChange={set('notes')} /></Field>
       </form>
     </Modal>

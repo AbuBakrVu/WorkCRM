@@ -8,7 +8,7 @@ import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
 import { TASK_STATUS, TASK_FILTERS } from '../lib/constants';
 import { fmtDate, fmtHM, todayStr, timeAgo } from '../lib/format';
-import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar, Segmented } from '../components/ui';
+import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar, Segmented, SearchList, userOptions, nameOptions } from '../components/ui';
 import { ProjectFormModal } from '../components/ProjectForm';
 import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskStatusPill, TaskWorkActions, isOverdue } from '../components/Tasks';
 import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
@@ -158,8 +158,8 @@ export default function Projects() {
             </button>
           )}>
             {({ close }) => (<>
-              <MenuItem checked={!emp} onClick={() => { setEmp(null); close(); }}>Все</MenuItem>
-              {users.filter((u) => u.active).map((u) => <MenuItem key={u.id} checked={emp === u.id} onClick={() => { setEmp(u.id); close(); }}>{u.name}</MenuItem>)}
+              <SearchList value={emp} placeholder="Поиск сотрудника…" onEscape={close}
+                items={[{ value: null, label: 'Все', muted: true }, ...userOptions(users)]} onPick={(v) => { setEmp(v); close(); }} />
             </>)}
           </Popover>
           {view === 'kanban' && (
@@ -173,8 +173,8 @@ export default function Projects() {
               );
             }}>
               {({ close }) => (<>
-                <MenuItem checked={!kProject} onClick={() => { setKProject(null); close(); }}>Все проекты</MenuItem>
-                {projects.map((p) => <MenuItem key={p.id} checked={kProject === p.id} onClick={() => { setKProject(p.id); close(); }}>{p.name}</MenuItem>)}
+                <SearchList value={kProject} placeholder="Поиск проекта…" onEscape={close}
+                  items={[{ value: null, label: 'Все проекты', muted: true }, ...nameOptions(projects)]} onPick={(v) => { setKProject(v); close(); }} />
               </>)}
             </Popover>
           )}

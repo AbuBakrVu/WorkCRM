@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { PROJECT_STATUS } from '../lib/constants';
-import { Modal, Field, Select, Button, UserPicker, ConfirmButton } from './ui';
+import { Modal, Field, Select, Button, UserPicker, ConfirmButton, userOptions, nameOptions } from './ui';
 
 // Проект = обслуживаемая организация (Минфин, университет, СДЭК…)
 export function ProjectFormModal({ open, onClose, onSaved, project }) {
@@ -48,7 +48,7 @@ export function ProjectFormModal({ open, onClose, onSaved, project }) {
         </Field>
         <Field label="Описание"><textarea className="input" rows={3} value={f.description || ''} onChange={set('description')} placeholder="Что обслуживаем, контакты, адрес" /></Field>
         <div className="grid grid-cols-2 gap-3.5">
-          <Field label="Ответственный"><Select value={f.owner_id} onChange={set('owner_id')} placeholder="—" options={users.filter((u) => u.active).map((u) => ({ value: u.id, label: u.name }))} /></Field>
+          <Field label="Ответственный"><Select value={f.owner_id} onChange={set('owner_id')} placeholder="—" search options={userOptions(users)} /></Field>
           <Field label="Участники"><UserPicker users={users} value={f.member_ids || []} onChange={set('member_ids')} /></Field>
         </div>
 
@@ -58,7 +58,7 @@ export function ProjectFormModal({ open, onClose, onSaved, project }) {
         {more && (
           <div className="grid grid-cols-2 gap-3.5">
             <Field label="Статус"><Select value={f.status} onChange={set('status')} options={Object.entries(PROJECT_STATUS).map(([value, s]) => ({ value, label: s.label }))} /></Field>
-            <Field label="Клиент (раздел «Клиенты»)"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" options={clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
+            <Field label="Клиент (раздел «Клиенты»)"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
             <Field label="Начало"><input type="date" className="input" value={f.start_date || ''} onChange={set('start_date')} /></Field>
             <Field label="Срок договора"><input type="date" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>
             <Field label="Бюджет, ₽"><input type="number" min="0" className="input" value={f.budget || ''} onChange={set('budget')} /></Field>

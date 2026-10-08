@@ -5,9 +5,7 @@ import { useApp, useLoad, useNow, useStored } from '../lib/store';
 import { api } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
 import { fmtDateTime, fmtHM, parseDate, timeAgo } from '../lib/format';
-import {
-  Button, Tabs, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx,
-} from '../components/ui';
+import { Button, Tabs, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, userOptions, nameOptions, SearchList } from '../components/ui';
 
 const OPEN = ['new', 'in_progress', 'waiting'];
 
@@ -91,9 +89,8 @@ export default function Tickets() {
             {assignee === -1 ? 'Не назначены' : assignee ? users.find((u) => u.id === assignee)?.name.split(' ')[0] : 'Исполнитель'}</button>
         )}>
           {({ close }) => (<>
-            <MenuItem checked={!assignee} onClick={() => { setAssignee(null); close(); }}>Все</MenuItem>
-            <MenuItem checked={assignee === -1} onClick={() => { setAssignee(-1); close(); }}>Не назначены</MenuItem>
-            {users.filter((u) => u.active).map((u) => <MenuItem key={u.id} checked={assignee === u.id} onClick={() => { setAssignee(u.id); close(); }}>{u.name}</MenuItem>)}
+            <SearchList value={assignee} placeholder="Поиск сотрудника…" onEscape={close}
+              items={[{ value: null, label: 'Все', muted: true }, { value: -1, label: 'Не назначены', muted: true }, ...userOptions(users)]} onPick={(v) => { setAssignee(v); close(); }} />
           </>)}
         </Popover>
         <Popover width={220} trigger={({ toggle }) => <button className={cx('chip', (prio.length || cat.length) && 'chip-active')} onClick={toggle}><Filter size={15} />Фильтр{prio.length + cat.length ? ` · ${prio.length + cat.length}` : ''}</button>}>
@@ -146,7 +143,8 @@ export default function Tickets() {
                             <span className={t.assignee_id ? '' : 'text-ink-3'}>{t.assignee_name?.split(' ')[0] || 'Назначить'}</span>
                           </button>
                         )}>
-                          {({ close }) => users.filter((u) => u.active).map((u) => <MenuItem key={u.id} checked={u.id === t.assignee_id} onClick={() => { patch(t.id, { assignee_id: u.id, ...(t.status === 'new' ? { status: 'in_progress' } : {}) }); close(); }}>{u.name}</MenuItem>)}
+                          {({ close }) => <SearchList value={t.assignee_id} placeholder="Поиск сотрудника…" onEscape={close} items={userOptions(users)}
+                            onPick={(id) => { patch(t.id, { assignee_id: id, ...(t.status === 'new' ? { status: 'in_progress' } : {}) }); close(); }} />}
                         </Popover>
                       </td>
                       <td className="td"><SlaBadge t={t} now={now} />{!OPEN.includes(t.status) && <span className="text-ink-3 text-[12px]">—</span>}</td>
@@ -232,9 +230,9 @@ export function TicketFormModal({ open, onClose, onSaved }) {
         <Field label="Место (корпус, кабинет)"><input className="input" value={f.location || ''} onChange={(e) => set('location')(e.target.value)} placeholder="Корпус №2, ауд. 214" /></Field>
         <Field label="Заявитель"><input className="input" value={f.requester || ''} onChange={(e) => set('requester')(e.target.value)} /></Field>
         <Field label="Контакт заявителя"><input className="input" value={f.requester_contact || ''} onChange={(e) => set('requester_contact')(e.target.value)} placeholder="Телефон или email" /></Field>
-        <Field label="Исполнитель"><Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" options={users.filter((u) => u.active).map((u) => ({ value: u.id, label: u.name }))} /></Field>
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" options={clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
-        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" options={projects.map((p) => ({ value: p.id, label: p.name }))} /></Field>
+        <Field label="Исполнитель"><Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" search options={userOptions(users)} /></Field>
+        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
+        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" search options={nameOptions(projects)} /></Field>
         <Field label="Описание" className="col-span-2"><textarea className="input" rows={3} value={f.description || ''} onChange={(e) => set('description')(e.target.value)} /></Field>
       </form>
     </Modal>
@@ -272,13 +270,13 @@ function TicketDrawer({ id, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3.5">
             <Field label="Статус"><Select value={t.status} onChange={(v) => patch({ status: v })} options={Object.entries(TICKET_STATUS).map(([value, s]) => ({ value, label: s.label }))} /></Field>
-            <Field label="Исполнитель"><Select value={t.assignee_id} onChange={(v) => patch({ assignee_id: v ? +v : null })} placeholder="Не назначен" options={users.filter((u) => u.active).map((u) => ({ value: u.id, label: u.name }))} /></Field>
+            <Field label="Исполнитель"><Select value={t.assignee_id} onChange={(v) => patch({ assignee_id: v ? +v : null })} placeholder="Не назначен" search options={userOptions(users)} /></Field>
             <Field label="Приоритет"><Select value={t.priority} onChange={(v) => patch({ priority: v })} options={Object.entries(TICKET_PRIORITY).map(([value, p]) => ({ value, label: p.label }))} /></Field>
             <Field label="Категория"><Select value={t.category} onChange={(v) => patch({ category: v })} options={Object.entries(TICKET_CATEGORY).map(([value, label]) => ({ value, label }))} /></Field>
             <Field label="Место"><input className="input" defaultValue={t.location || ''} onBlur={(e) => e.target.value !== (t.location || '') && patch({ location: e.target.value })} /></Field>
             <Field label="Заявитель"><input className="input" defaultValue={t.requester || ''} onBlur={(e) => e.target.value !== (t.requester || '') && patch({ requester: e.target.value })} /></Field>
-            <Field label="Клиент"><Select value={t.client_id} onChange={(v) => patch({ client_id: v ? +v : null })} placeholder="—" options={clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
-            <Field label="Проект"><Select value={t.project_id} onChange={(v) => patch({ project_id: v ? +v : null })} placeholder="—" options={projects.map((p) => ({ value: p.id, label: p.name }))} /></Field>
+            <Field label="Клиент"><Select value={t.client_id} onChange={(v) => patch({ client_id: v ? +v : null })} placeholder="—" search options={nameOptions(clients)} /></Field>
+            <Field label="Проект"><Select value={t.project_id} onChange={(v) => patch({ project_id: v ? +v : null })} placeholder="—" search options={nameOptions(projects)} /></Field>
           </div>
           {t.requester_contact && <div className="text-[13px] text-ink-2">Контакт: {t.requester_contact}</div>}
           <Field label="Описание"><textarea className="input" rows={3} defaultValue={t.description || ''} onBlur={(e) => e.target.value !== (t.description || '') && patch({ description: e.target.value })} /></Field>

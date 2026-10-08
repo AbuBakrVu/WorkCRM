@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { X, ChevronDown, Check, ArrowUpRight } from 'lucide-react';
+import { X, ChevronDown, Check, ArrowUpRight, Search } from 'lucide-react';
 import { initials } from '../lib/format';
 
 export const cx = (...a) => a.filter(Boolean).join(' ');
@@ -140,14 +140,119 @@ export function Field({ label, children, className, hint }) {
   );
 }
 
-export function Select({ value, onChange, options, placeholder, className, ...p }) {
+// Поиск по списку + выбор (клавиатура: ↑ ↓ Enter, Esc — закрыть)
+// items: [{ value, label, user?, color?, hint? }]; value — одно значение или массив (multi)
+export function SearchList({ items, value, onPick, multi, search = true, placeholder = 'Поиск…', empty = 'Ничего не найдено', onEscape, maxHeight = 280 }) {
+  const [q, setQ] = useState('');
+  const [hi, setHi] = useState(0);
+  const listRef = useRef(null);
+  const ql = q.trim().toLowerCase();
+  const shown = ql ? items.filter((it) => `${it.label} ${it.hint || ''}`.toLowerCase().includes(ql)) : items;
+  const isOn = (v) => (multi ? (value || []).some((x) => String(x) === String(v)) : String(value ?? '') === String(v ?? ''));
+  useEffect(() => { setHi(0); }, [ql]);
+  useEffect(() => { listRef.current?.children[hi]?.scrollIntoView({ block: 'nearest' }); }, [hi]);
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(shown.length - 1, h + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (shown[hi]) onPick(shown[hi].value); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onEscape?.(); }
+  };
   return (
-    <select {...p} className={cx('input', className)} value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
-      {placeholder !== undefined && <option value="">{placeholder}</option>}
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    <div onKeyDown={search ? undefined : onKey}>
+      {search && (
+        <div className="flex items-center gap-2 h-9 px-2.5 mb-1 rounded-lg bg-canvas border border-line">
+          <Search size={14} className="text-ink-3 shrink-0" />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder={placeholder}
+            className="flex-1 min-w-0 bg-transparent outline-none text-[13px] placeholder:text-ink-3" />
+          {q && <button type="button" onClick={() => setQ('')} className="text-ink-3 hover:text-ink"><X size={13} /></button>}
+        </div>
+      )}
+      <div ref={listRef} className="overflow-y-auto" style={{ maxHeight }}>
+        {shown.map((it, i) => (
+          <button type="button" key={String(it.value ?? '__none')} onMouseEnter={() => setHi(i)} onClick={() => onPick(it.value)}
+            className={cx('w-full flex items-center gap-2 px-2.5 min-h-8 py-1 rounded-lg text-[13px] text-left', i === hi ? 'bg-canvas text-ink' : 'text-ink-2', it.muted && 'text-ink-3')}>
+            {it.user && <Avatar user={it.user} size={20} ring={false} />}
+            {it.color && <span className="size-2.5 rounded-full shrink-0" style={{ background: it.color }} />}
+            <span className="flex-1 min-w-0 truncate">{it.label}{it.hint && <span className="text-ink-3"> · {it.hint}</span>}</span>
+            {isOn(it.value) && <Check size={15} className="text-violet shrink-0" />}
+          </button>
+        ))}
+        {!shown.length && <div className="px-2.5 py-3 text-[12.5px] text-ink-3 text-center">{empty}</div>}
+      </div>
+    </div>
   );
 }
+
+// Выпадающая панель в портале под элементом (не обрезается модалками и таблицами)
+function useFloating(open, anchorRef, panelRef, onClose, minWidth = 220) {
+  const [pos, setPos] = useState(null);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const h = panelRef.current?.offsetHeight || 320;
+      const below = window.innerHeight - r.bottom;
+      const up = below < h + 12 && r.top > below;
+      const width = Math.max(r.width, minWidth);
+      const left = Math.min(r.left, window.innerWidth - width - 8);
+      setPos(up ? { left, width, bottom: window.innerHeight - r.top + 6 } : { left, width, top: r.bottom + 6 });
+    };
+    place();
+    const raf = requestAnimationFrame(place);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [open, anchorRef, panelRef, minWidth]);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (!anchorRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, anchorRef, panelRef, onClose]);
+  return pos;
+}
+
+function FloatingPanel({ open, anchorRef, onClose, minWidth, children }) {
+  const panelRef = useRef(null);
+  const pos = useFloating(open, anchorRef, panelRef, onClose, minWidth);
+  if (!open) return null;
+  return createPortal(
+    <div ref={panelRef} className="fixed z-[70] bg-panel border border-line rounded-xl shadow-xl p-1.5 anim-pop"
+      style={pos ? { left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom } : { opacity: 0, left: 0, top: 0 }}>
+      {children}
+    </div>, document.body);
+}
+
+// Выпадающий список. Для длинных списков (или search) — с поиском.
+// Возвращает значение строкой, как обычный <select>; пустое — null.
+export function Select({ value, onChange, options, placeholder, className, disabled, search, renderValue }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  const items = [...(placeholder !== undefined ? [{ value: null, label: placeholder === '—' ? 'Не выбрано' : placeholder, muted: true }] : []), ...options];
+  const cur = options.find((o) => String(o.value) === String(value ?? ''));
+  const withSearch = search ?? options.length > 8;
+  return (
+    <>
+      <button type="button" ref={ref} disabled={disabled} onClick={() => setOpen((o) => !o)}
+        className={cx('input flex items-center gap-2 text-left disabled:opacity-60 disabled:cursor-not-allowed', open && 'border-violet/60 ring-3 ring-violet/10', className)}>
+        {cur?.user && <Avatar user={cur.user} size={20} ring={false} />}
+        {cur?.color && <span className="size-2.5 rounded-full shrink-0" style={{ background: cur.color }} />}
+        <span className={cx('flex-1 min-w-0 truncate', !cur && 'text-ink-3')}>{cur ? (renderValue ? renderValue(cur) : cur.label) : (placeholder ?? '—')}</span>
+        <ChevronDown size={15} className={cx('text-ink-3 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+      <FloatingPanel open={open} anchorRef={ref} onClose={close}>
+        <SearchList items={items} value={value} search={withSearch} onEscape={close}
+          onPick={(v) => { onChange(v === null || v === undefined || v === '' ? null : String(v)); close(); }} />
+      </FloatingPanel>
+    </>
+  );
+}
+
+// Готовые списки сущностей для Select / SearchList
+export const userOptions = (users, { all = false } = {}) => users.filter((u) => all || u.active).map((u) => ({ value: u.id, label: u.name, user: u }));
+export const nameOptions = (list) => list.map((x) => ({ value: x.id, label: x.name }));
 
 // Выпадающее меню / поповер, привязанный к кнопке
 export function Popover({ trigger, children, align = 'left', width = 220 }) {
@@ -181,29 +286,29 @@ export function MenuItem({ children, onClick, checked, icon: Icon, danger }) {
   );
 }
 
-// Мультиселект пользователей (для участников проекта)
-export function UserPicker({ users, value = [], onChange }) {
+// Мультиселект пользователей (участники, соисполнители, наблюдатели) — с поиском
+export function UserPicker({ users, value = [], onChange, placeholder = 'Выберите участников', exclude = [] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  const chosen = users.filter((u) => value.includes(u.id));
   return (
-    <Popover width={260} trigger={({ toggle }) => (
-      <button type="button" onClick={toggle} className="input flex items-center justify-between gap-2">
-        {value.length ? <AvatarStack users={users.filter((u) => value.includes(u.id))} max={6} size={22} /> : <span className="text-ink-3">Выберите участников</span>}
-        <ChevronDown size={15} className="text-ink-3" />
+    <>
+      <button type="button" ref={ref} onClick={() => setOpen((o) => !o)}
+        className={cx('input flex items-center justify-between gap-2', open && 'border-violet/60 ring-3 ring-violet/10')}>
+        {chosen.length ? (
+          <span className="flex items-center gap-2 min-w-0">
+            <AvatarStack users={chosen} max={5} size={22} />
+            <span className="truncate text-ink-2">{chosen.length === 1 ? chosen[0].name : `${chosen.length} чел.`}</span>
+          </span>
+        ) : <span className="text-ink-3">{placeholder}</span>}
+        <ChevronDown size={15} className={cx('text-ink-3 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
-    )}>
-      <div className="max-h-64 overflow-y-auto">
-        {users.filter((u) => u.active).map((u) => {
-          const on = value.includes(u.id);
-          return (
-            <button type="button" key={u.id} onClick={() => onChange(on ? value.filter((x) => x !== u.id) : [...value, u.id])}
-              className="w-full flex items-center gap-2 px-2 h-9 rounded-lg hover:bg-canvas text-[13px]">
-              <Avatar user={u} size={22} ring={false} />
-              <span className="flex-1 text-left truncate">{u.name}</span>
-              {on && <Check size={15} className="text-violet" />}
-            </button>
-          );
-        })}
-      </div>
-    </Popover>
+      <FloatingPanel open={open} anchorRef={ref} onClose={close} minWidth={260}>
+        <SearchList multi value={value} items={userOptions(users).filter((o) => !exclude.includes(o.value))} placeholder="Поиск сотрудника…" onEscape={close}
+          onPick={(id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])} />
+      </FloatingPanel>
+    </>
   );
 }
 

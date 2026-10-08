@@ -5,7 +5,7 @@ import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate, MONTHS, toDateStr } from '../lib/format';
-import { Button, Card, Modal, Field, Select, Stat, PageHeader, Empty, Spinner, cx } from '../components/ui';
+import { Button, Card, Modal, Field, Select, Stat, PageHeader, Empty, Spinner, cx, nameOptions } from '../components/ui';
 import { ChartTip, Legend, C_INCOME, C_EXPENSE } from './Dashboard';
 
 const PERIODS = { month: 'Этот месяц', prev: 'Прошлый месяц', quarter: '3 месяца', year: '12 месяцев' };
@@ -153,8 +153,8 @@ function TxModal({ tx, onClose }) {
         <Field label="Сумма, ₽"><input type="number" min="0" step="0.01" className="input" value={f.amount || ''} onChange={set('amount')} autoFocus /></Field>
         <Field label="Дата"><input type="date" className="input" value={f.date || ''} onChange={set('date')} /></Field>
         <Field label="Категория"><Select value={f.category} onChange={set('category')} placeholder="—" options={cats.map((c) => ({ value: c, label: c }))} /></Field>
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" options={clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
-        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" options={projects.map((p) => ({ value: p.id, label: p.name }))} /></Field>
+        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
+        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" search options={nameOptions(projects)} /></Field>
         <Field label="Описание" className="col-span-2"><input className="input" value={f.description || ''} onChange={set('description')} /></Field>
       </form>
     </Modal>
