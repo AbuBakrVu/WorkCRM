@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Filter, User, Table2, Kanban, X, MapPin, Clock, Play, MessageSquare, AlertTriangle, Ticket as TicketIcon, Send } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored } from '../lib/store';
 import { SavedViews } from '../components/SavedViews';
+import { HistoryPanel } from '../components/History';
 import { api } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
 import { fmtDateTime, fmtHM, parseDate, timeAgo } from '../lib/format';
@@ -306,6 +307,7 @@ function TicketDrawer({ id, onClose }) {
               <Button variant="dark" icon={Send} type="submit">Отправить</Button>
             </form>
           </div>
+          <HistoryPanel entity="ticket" id={t.id} />
           {isManager && <div className="pt-2 border-t border-line"><ConfirmButton onConfirm={remove}>Удалить заявку</ConfirmButton></div>}
         </div>
       )}

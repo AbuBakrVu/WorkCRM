@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { api, runRecurrences, runInvoiceSchedules } from './routes.js';
+import { trashAutoPurge } from './audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -37,6 +38,7 @@ app.listen(PORT, () => console.log(`CRM запущена на http://localhost:$
 const tick = () => {
   try { runRecurrences(); } catch (e) { console.error(e); }
   try { runInvoiceSchedules(); } catch (e) { console.error(e); }
+  try { trashAutoPurge(30); } catch (e) { console.error(e); }
 };
 tick();
 setInterval(tick, 10 * 60 * 1000);

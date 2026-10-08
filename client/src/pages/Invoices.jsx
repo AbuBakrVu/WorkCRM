@@ -7,6 +7,7 @@ import { INVOICE_STATUS, VAT_MODE, VAT_RATES } from '../lib/constants';
 import { fmtRub, fmtMoneyShort, fmtDate, todayStr, toDateStr, plural } from '../lib/format';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, Stat, Tabs, StatusDot, cx, nameOptions } from '../components/ui';
 import { ItemsEditor, badItem, itemsBody, itemsFromServer } from '../components/ItemsEditor';
+import { HistoryPanel } from '../components/History';
 
 const addDays = (s, n) => { const d = new Date(s); d.setDate(d.getDate() + n); return toDateStr(d); };
 const TABS = { all: 'Все', unpaid: 'Ждут оплаты', overdue: 'Просроченные', paid: 'Оплаченные', cancelled: 'Отменённые' };
@@ -174,6 +175,7 @@ export function InvoiceDrawer({ id, onClose, onEdit, onChanged }) {
             )}
           </div>
           {inv.notes && <p className="text-[13px] text-ink-2 bg-canvas rounded-xl p-3 whitespace-pre-wrap">{inv.notes}</p>}
+          <HistoryPanel entity="invoice" id={inv.id} />
           {isManager && (
             <div className="flex flex-wrap gap-2 pt-3 border-t border-line">
               {inv.cancelled ? <Button size="sm" icon={RotateCcw} onClick={() => call(api.put(`/invoices/${id}`, { cancelled: false }), 'Счёт восстановлен')}>Восстановить</Button>

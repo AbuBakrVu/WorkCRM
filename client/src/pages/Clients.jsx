@@ -8,6 +8,7 @@ import { CLIENT_TYPE, PROJECT_STATUS, DEAL_STAGE, TICKET_STATUS, INVOICE_STATUS 
 import { fmtMoney, fmtMoneyShort, fmtDate } from '../lib/format';
 import { RequisitesFields, InnButton } from '../components/Requisites';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, Tabs, cx } from '../components/ui';
+import { HistoryPanel } from '../components/History';
 
 export default function Clients() {
   const { data, loading } = useLoad('/clients');
@@ -149,6 +150,7 @@ function ClientDrawer({ id, onClose, onEdit }) {
             <Link to={`/invoices?open=${i.id}`} className="flex-1 flex items-center gap-2 min-w-0 hover:text-violet"><span className="font-semibold w-14">№ {i.number}</span><span className="text-ink-3 w-16">{fmtDate(i.date)}</span><span className="truncate">{i.title || i.deal_title || ''}</span></Link>
             <span className="tabular text-ink-2 mr-3">{fmtMoney(i.total)}</span><StatusDot color={INVOICE_STATUS[i.status].color} label={INVOICE_STATUS[i.status].label} /></>} />}
           {isManager && <Section title="Платежи" items={c.transactions} render={(x) => <><span className="text-ink-3 w-16">{fmtDate(x.date)}</span><span className="flex-1 truncate">{x.description}</span><span className={cx('tabular', x.type === 'income' ? 'text-emerald-600' : 'text-ink-2')}>{x.type === 'income' ? '+' : '−'}{fmtMoney(x.amount)}</span></>} />}
+          <HistoryPanel entity="client" id={c.id} />
           {isManager && <div className="pt-2 border-t border-line"><ConfirmButton onConfirm={remove}>Удалить клиента</ConfirmButton></div>}
         </div>
       )}

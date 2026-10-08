@@ -418,6 +418,37 @@ const MIGRATIONS = [
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_views_page ON saved_views(page);`),
+  // 14. Журнал входов, история изменений, корзина
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS auth_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      email TEXT,
+      ok INTEGER NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_auth_log_user ON auth_log(user_id, id);
+    CREATE TABLE IF NOT EXISTS entity_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      field TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_history_entity ON entity_history(entity, entity_id, id);
+    CREATE TABLE IF NOT EXISTS trash (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      title TEXT,
+      snapshot TEXT NOT NULL,
+      deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      deleted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );`),
 ];
 
 {

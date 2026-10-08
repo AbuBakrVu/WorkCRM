@@ -8,6 +8,7 @@ import { fmtRub, fmtDate } from '../lib/format';
 import { ItemsEditor, badItem, itemsBody } from './ItemsEditor';
 export { calcItems } from './ItemsEditor';
 import { Button, Modal, Field, Select, ConfirmButton, Spinner, StatusDot, userOptions, nameOptions } from './ui';
+import { HistoryPanel } from './History';
 
 export function DealModal({ deal, onClose }) {
   const { users, clients, toast, bump, isManager } = useApp();
@@ -107,6 +108,7 @@ export function DealModal({ deal, onClose }) {
           )}
 
           <Field label="Заметки"><textarea className="input" rows={3} value={f.notes || ''} onChange={set('notes')} /></Field>
+          {f.id && <HistoryPanel entity="deal" id={f.id} />}
         </div>
       )}
     </Modal>

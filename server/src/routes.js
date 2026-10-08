@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { all, get, run, tx, logActivity, UPLOAD_DIR } from './db.js';
 import { nextDate, addDays, todayMsk } from './recurrence.js';
+import { requestUser, recordChanges, recordEvent, trashDelete, trashRestore, trashPurge } from './audit.js';
 import {
   requireAuth, requireRole, issueToken, clearToken, hashPassword, checkPassword,
   publicUser, loginRateLimit,
@@ -45,6 +46,7 @@ function insert(table, data) {
 function update(table, id, data) {
   const keys = Object.keys(data);
   if (!keys.length) return;
+  recordChanges(table, id, data); // история изменений
   run(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => data[k]), id);
 }
 const idParam = (req) => {
@@ -78,7 +80,10 @@ api.post('/auth/setup', wrap((req, res) => {
 api.post('/auth/login', loginRateLimit, wrap((req, res) => {
   const { email, password } = req.body || {};
   const user = email && get('SELECT * FROM users WHERE email = ? AND active = 1', String(email).trim());
-  if (!user || !checkPassword(String(password || ''), user.password_hash)) throw new HttpError(401, 'Неверный email или пароль');
+  const ok = !!user && checkPassword(String(password || ''), user.password_hash);
+  const ip = String(req.ip || req.socket?.remoteAddress || '').replace(/^::ffff:/, '').slice(0, 64);
+  run('INSERT INTO auth_log (user_id, email, ok, ip, user_agent) VALUES (?,?,?,?,?)', user?.id ?? null, String(email || '').slice(0, 120), ok ? 1 : 0, ip, String(req.get('user-agent') || '').slice(0, 300));
+  if (!ok) throw new HttpError(401, 'Неверный email или пароль');
   issueToken(res, user);
   return publicUser(user);
 }));
@@ -86,6 +91,7 @@ api.post('/auth/login', loginRateLimit, wrap((req, res) => {
 api.post('/auth/logout', wrap((req, res) => { clearToken(res); return { ok: true }; }));
 
 api.use(requireAuth);
+api.use((req, res, next) => requestUser.run({ userId: req.user.id }, next));
 
 api.get('/auth/me', wrap((req) => req.user));
 
@@ -175,7 +181,7 @@ api.put('/clients/:id', wrap((req) => {
   update('clients', id, pick(req.body, CLIENT_FIELDS));
   return get('SELECT * FROM clients WHERE id = ?', id);
 }));
-api.delete('/clients/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM clients WHERE id = ?', idParam(req)); return { ok: true }; }));
+api.delete('/clients/:id', requireRole('admin', 'manager'), wrap((req) => { const id = idParam(req); trashDelete('client', 'clients', id, get('SELECT name FROM clients WHERE id = ?', id)?.name); return { ok: true }; }));
 
 /* ---------- projects ---------- */
 const PROJECT_FIELDS = ['name', 'description', 'status', 'client_id', 'owner_id', 'start_date', 'due_date', 'budget', 'manual_progress', 'visible'];
@@ -253,7 +259,7 @@ api.put('/projects/:id', wrap((req) => {
 api.delete('/projects/:id', requireRole('admin', 'manager'), wrap((req) => {
   const id = idParam(req);
   const p = get('SELECT name FROM projects WHERE id = ?', id);
-  run('DELETE FROM projects WHERE id = ?', id);
+  trashDelete('project', 'projects', id, p?.name);
   if (p) logActivity(req.user.id, 'project', id, 'delete', `удалил проект «${p.name}»`);
   return { ok: true };
 }));
@@ -406,9 +412,8 @@ api.delete('/tasks/:id', wrap((req) => {
   const t = getTask(id);
   if (!t) throw notFound();
   if (!taskPerms(req.user, t).edit) throw new HttpError(403, 'Удалить задачу может только постановщик или администратор');
-  const files = all('SELECT stored FROM files WHERE task_id = ?', id);
-  run('DELETE FROM tasks WHERE id = ?', id);
-  files.forEach((f) => removeStored(f.stored));
+  trashDelete('task', 'tasks', id, t.title); // файлы остаются на диске, пока задача в корзине
+  logActivity(req.user.id, 'task', id, 'delete', `удалил задачу «${t.title}»`);
   return { ok: true };
 }));
 
@@ -757,7 +762,7 @@ api.post('/tickets/:id/comments', wrap((req) => {
   return all(`SELECT m.*, u.name user_name, u.color user_color FROM ticket_comments m LEFT JOIN users u ON u.id = m.user_id
               WHERE m.ticket_id = ? ORDER BY m.created_at`, id);
 }));
-api.delete('/tickets/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM tickets WHERE id = ?', idParam(req)); return { ok: true }; }));
+api.delete('/tickets/:id', requireRole('admin', 'manager'), wrap((req) => { const id = idParam(req); const t = get('SELECT title FROM tickets WHERE id = ?', id); trashDelete('ticket', 'tickets', id, t && `#${id} ${t.title}`); return { ok: true }; }));
 
 /* ---------- мои компании (от чьего имени выставляем документы) ---------- */
 const COMPANY_FIELDS = ['name', 'full_name', 'inn', 'kpp', 'ogrn', 'address', 'phone', 'email', 'site', 'bank_name', 'bik', 'account',
@@ -976,7 +981,7 @@ api.put('/deals/:id', wrap((req) => {
   if (data.stage && data.stage !== before.stage) logActivity(req.user.id, 'deal', id, 'stage', `перевёл сделку «${before.title}» на этап ${data.stage}`);
   return getDeal(id);
 }));
-api.delete('/deals/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM deals WHERE id = ?', idParam(req)); return { ok: true }; }));
+api.delete('/deals/:id', requireRole('admin', 'manager'), wrap((req) => { const id = idParam(req); trashDelete('deal', 'deals', id, get('SELECT title FROM deals WHERE id = ?', id)?.title); return { ok: true }; }));
 
 /* ---------- нумерация документов: по компании, виду и году ---------- */
 export function nextDocNumber(companyId, kind, date) {
@@ -1083,7 +1088,8 @@ api.put('/invoices/:id', requireRole('admin', 'manager'), wrap((req) => {
 api.delete('/invoices/:id', requireRole('admin', 'manager'), wrap((req) => {
   const id = idParam(req);
   if (get('SELECT 1 FROM invoice_payments WHERE invoice_id = ? LIMIT 1', id)) throw bad('По счёту есть оплаты — его можно только отменить');
-  run('DELETE FROM invoices WHERE id = ?', id);
+  const inv = get('SELECT number, date FROM invoices WHERE id = ?', id);
+  trashDelete('invoice', 'invoices', id, inv && `Счёт № ${inv.number} от ${inv.date.split('-').reverse().join('.')}`);
   return { ok: true };
 }));
 // Оплата: записывается в счёт и как доход в «Финансы»
@@ -1229,7 +1235,44 @@ api.put('/contracts/:id', requireRole('admin', 'manager'), wrap((req) => {
   update('support_contracts', id, pick(req.body, CONTRACT_FIELDS));
   return get(`${CONTRACT_SELECT} WHERE k.id = ?`, id);
 }));
-api.delete('/contracts/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM support_contracts WHERE id = ?', idParam(req)); return { ok: true }; }));
+api.delete('/contracts/:id', requireRole('admin', 'manager'), wrap((req) => { const id = idParam(req); const k = get(`${CONTRACT_SELECT} WHERE k.id = ?`, id); trashDelete('contract', 'support_contracts', id, k && `Абонентка: ${k.client_name || k.project_name}`); return { ok: true }; }));
+
+/* ---------- история изменений ---------- */
+// Имена вместо id для полей-ссылок
+const REF_NAMES = { assignee_id: 'users', owner_id: 'users', created_by: 'users', client_id: 'clients', project_id: 'projects', company_id: 'companies', deal_id: 'deals', parent_id: 'tasks' };
+function refName(field, v) {
+  const t = REF_NAMES[field];
+  if (!t || v == null) return v;
+  const col = t === 'deals' || t === 'tasks' ? 'title' : 'name';
+  return get(`SELECT ${col} n FROM ${t} WHERE id = ?`, Number(v))?.n ?? `#${v}`;
+}
+api.get('/history', wrap((req) => {
+  const entity = String(req.query.entity || ''); const id = Number(req.query.id);
+  if (!entity || !id) throw bad('Не указан объект');
+  if (['invoice', 'contract', 'transaction', 'company'].includes(entity) && !['admin', 'manager'].includes(req.user.role)) throw new HttpError(403, 'Недостаточно прав');
+  return all(`SELECT h.*, u.name user_name, u.color user_color FROM entity_history h LEFT JOIN users u ON u.id = h.user_id
+    WHERE h.entity = ? AND h.entity_id = ? ORDER BY h.id DESC LIMIT 200`, entity, id)
+    .map((h) => ({ ...h, old_value: refName(h.field, h.old_value), new_value: refName(h.field, h.new_value) }));
+}));
+
+/* ---------- корзина ---------- */
+api.get('/trash', requireRole('admin', 'manager'), wrap(() => all(`SELECT t.id, t.entity, t.entity_id, t.title, t.deleted_at, u.name deleted_by_name
+  FROM trash t LEFT JOIN users u ON u.id = t.deleted_by ORDER BY t.id DESC LIMIT 500`)));
+api.post('/trash/:id/restore', requireRole('admin', 'manager'), wrap((req) => {
+  try { const t = trashRestore(idParam(req)); if (!t) throw notFound(); return { ok: true, entity: t.entity, entity_id: t.entity_id }; }
+  catch (e) { if (e instanceof HttpError) throw e; throw bad(`Не удалось восстановить: ${e.message}`); }
+}));
+api.delete('/trash/:id', requireRole('admin'), wrap((req) => { trashPurge(idParam(req)); return { ok: true }; }));
+
+/* ---------- журнал входов ---------- */
+api.get('/auth-log', requireRole('admin'), wrap((req) => {
+  const where = []; const args = [];
+  if (req.query.user_id) { where.push('l.user_id = ?'); args.push(Number(req.query.user_id)); }
+  if (req.query.failed) where.push('l.ok = 0');
+  return all(`SELECT l.*, u.name user_name, u.color user_color FROM auth_log l LEFT JOIN users u ON u.id = l.user_id
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY l.id DESC LIMIT 300`, ...args);
+}));
+api.get('/auth/logins', wrap((req) => all('SELECT id, ok, ip, user_agent, created_at FROM auth_log WHERE user_id = ? ORDER BY id DESC LIMIT 10', req.user.id)));
 
 /* ---------- сохранённые фильтры ---------- */
 api.get('/views', wrap((req) => all(`SELECT v.*, u.name user_name FROM saved_views v JOIN users u ON u.id = v.user_id
@@ -1504,7 +1547,7 @@ finance.put('/:id', wrap((req) => {
   update('transactions', id, pick(req.body, TX_FIELDS));
   return get(`${TX_SELECT} WHERE x.id = ?`, id);
 }));
-finance.delete('/:id', wrap((req) => { run('DELETE FROM transactions WHERE id = ?', idParam(req)); return { ok: true }; }));
+finance.delete('/:id', wrap((req) => { const id = idParam(req); const x = get('SELECT * FROM transactions WHERE id = ?', id); trashDelete('transaction', 'transactions', id, x && `${x.type === 'income' ? 'Доход' : 'Расход'} ${Math.round(x.amount).toLocaleString('ru-RU')} ₽ · ${x.description || x.category || ''}`); return { ok: true }; }));
 api.use('/transactions', finance);
 
 /* ---------- dashboard ---------- */

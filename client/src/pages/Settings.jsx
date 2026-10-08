@@ -5,6 +5,9 @@ import { ROLES, USER_COLORS } from '../lib/constants';
 import { Button, Card, Field, PageHeader, Avatar, Tabs, cx } from '../components/ui';
 import { useStored } from '../lib/store';
 import { CompaniesSettings } from '../components/Companies';
+import { TrashSettings, AuthLogSettings, shortUA } from '../components/Trash';
+import { fmtDateTime } from '../lib/format';
+import { useLoad } from '../lib/store';
 
 export default function Settings() {
   const { user, setUser, toast, bump, isManager } = useApp();
@@ -27,9 +30,11 @@ export default function Settings() {
       <PageHeader title="Настройки" subtitle="Профиль, безопасность и реквизиты компаний" />
       {isManager && (
         <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Профиль' }, { value: 'companies', label: 'Мои компании' },
-          ...(user.role === 'admin' ? [{ value: 'integrations', label: 'Интеграции' }] : [])]} /></div>
+          { value: 'trash', label: 'Корзина' },
+          ...(user.role === 'admin' ? [{ value: 'integrations', label: 'Интеграции' }, { value: 'security', label: 'Журнал входов' }] : [])]} /></div>
       )}
-      {isManager && tab === 'companies' ? <CompaniesSettings /> : user.role === 'admin' && tab === 'integrations' ? <Integrations /> : (<>
+      {isManager && tab === 'companies' ? <CompaniesSettings /> : isManager && tab === 'trash' ? <TrashSettings />
+        : user.role === 'admin' && tab === 'integrations' ? <Integrations /> : user.role === 'admin' && tab === 'security' ? <AuthLogSettings /> : (<>
       <Card className="p-6">
         <div className="flex items-center gap-4 mb-5">
           <Avatar user={{ ...user, ...f }} size={56} ring={false} />
@@ -53,6 +58,7 @@ export default function Settings() {
           <div className="sm:col-span-2"><Button variant="dark" disabled={!pw.new_password}>Изменить пароль</Button></div>
         </form>
       </Card>
+      <MyLogins />
       </>)}
     </div>
   );
@@ -72,6 +78,26 @@ function Integrations() {
       <div className="flex gap-2 max-w-[520px]">
         <input className="input" value={f.dadata_key || ''} onChange={(e) => setF((x) => ({ ...x, dadata_key: e.target.value }))} placeholder="API-ключ" autoComplete="off" />
         <Button variant="primary" onClick={save}>Сохранить</Button>
+      </div>
+    </Card>
+  );
+}
+
+function MyLogins() {
+  const { data } = useLoad('/auth/logins');
+  if (!data?.length) return null;
+  return (
+    <Card className="p-6 mt-4">
+      <h2 className="text-[15px] font-semibold mb-1">Последние входы</h2>
+      <p className="text-[12.5px] text-ink-3 mb-3">Если видите вход, который делали не вы, — смените пароль.</p>
+      <div className="divide-y divide-line">
+        {data.map((r) => (
+          <div key={r.id} className="flex items-center gap-3 py-2 text-[13px]">
+            <span className={cx('size-2 rounded-full', r.ok ? 'bg-emerald-500' : 'bg-red-500')} />
+            <span className="w-36 tabular">{fmtDateTime(r.created_at)}</span><span className="flex-1 text-ink-2">{shortUA(r.user_agent)}</span><span className="text-ink-3 tabular">{r.ip}</span>
+            {!r.ok && <span className="text-red-600 text-[12px]">неверный пароль</span>}
+          </div>
+        ))}
       </div>
     </Card>
   );

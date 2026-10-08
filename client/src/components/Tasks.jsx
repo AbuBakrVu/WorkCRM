@@ -11,6 +11,7 @@ import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, pars
 import { ChecklistBlock, SubtasksBlock, DepsBlock } from './TaskExtras';
 import { RecurrenceFields, recurrenceBody, ruleText } from './Recurrence';
 import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
+import { HistoryPanel } from './History';
 
 export const isOverdue = (t) => t.status !== 'done' && t.due_date && t.due_date < todayStr();
 
@@ -342,6 +343,7 @@ export function TaskDrawer({ id: rootId, onClose }) {
               <ChecklistBlock task={t} canWork={perms.status} onChange={(checklist) => setT((x) => ({ ...x, checklist }))} />
               <SubtasksBlock task={t} canEdit={perms.status && t.status !== 'done'} onOpen={setId} onChanged={() => api.get(`/tasks/${id}`).then(setT)} />
               <DepsBlock task={t} canEdit={perms.edit} onOpen={setId} onChange={setT} />
+              <HistoryPanel entity="task" id={t.id} />
             </div>
 
             {/* Действия */}
