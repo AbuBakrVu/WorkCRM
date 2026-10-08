@@ -8,6 +8,7 @@ import { taskPerms } from '../lib/perms';
 import { api, fileUrl, fmtSize } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
+import { ChecklistBlock, SubtasksBlock, DepsBlock } from './TaskExtras';
 import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
 
 export const isOverdue = (t) => t.status !== 'done' && t.due_date && t.due_date < todayStr();
@@ -60,6 +61,9 @@ export function TaskWorkActions({ task: t, onStarted }) {
   const timerHere = timer && timer.task_id === t.id;
   const stop = (e) => e.stopPropagation();
   const start = async (e) => { stop(e); const nt = await startWork(t); if (nt) onStarted?.(nt); };
+  if (t.status === 'todo' && t.blocked_count > 0) {
+    return <span onClick={stop} title="Сначала нужно закрыть задачи, от которых зависит эта" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-amber-300 bg-amber-50 text-amber-700 text-[12px] font-medium whitespace-nowrap"><Lock size={12} />Ждёт задач</span>;
+  }
   if (t.status === 'todo') {
     return (
       <button onClick={start} className="inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-brand text-white text-[12.5px] font-semibold hover:bg-brand-strong transition-colors whitespace-nowrap">
@@ -208,7 +212,10 @@ function PeopleChips({ users, ids, editable, onChange }) {
   );
 }
 
-export function TaskDrawer({ id, onClose }) {
+export function TaskDrawer({ id: rootId, onClose }) {
+  // Внутри карточки можно перейти к подзадаче/зависимости — показываем её, «назад» — к исходной
+  const [id, setId] = useState(rootId);
+  useEffect(() => { setId(rootId); }, [rootId]);
   const { user, users, toast, bump, pauseTimer, resumeTimer, timer, version, startWork, askWork } = useApp();
   const [t, setT] = useState(null);
   const [edit, setEdit] = useState(false);
@@ -265,7 +272,9 @@ export function TaskDrawer({ id, onClose }) {
           <div className="lg:h-full flex flex-col lg:border-r border-line min-h-0 bg-canvas/50">
             <div className="flex-1 lg:overflow-y-auto p-4 space-y-3">
               <div className="flex items-center gap-1.5 text-[12.5px] text-ink-3 px-1">
+                {id !== rootId && <button onClick={() => setId(rootId)} className="inline-flex items-center gap-1 mr-1.5 text-violet font-medium hover:underline">← Назад</button>}
                 <FolderOpen size={14} /><span className="truncate">{t.project_name}</span><span>·</span><span>№ {t.id}</span>
+                {t.parent_id && <><span>·</span><button onClick={() => setId(t.parent_id)} className="truncate hover:text-violet hover:underline">подзадача «{t.parent_title}»</button></>}
               </div>
 
               <Section title="Описание" action={perms.edit && <button onClick={() => setEdit(true)} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-violet hover:underline"><Pencil size={13} />Изменить</button>}>
@@ -308,6 +317,10 @@ export function TaskDrawer({ id, onClose }) {
                 </>}>
                 <TaskFiles taskId={t.id} />
               </Section>
+
+              <ChecklistBlock task={t} canWork={perms.status} onChange={(checklist) => setT((x) => ({ ...x, checklist }))} />
+              <SubtasksBlock task={t} canEdit={perms.status && t.status !== 'done'} onOpen={setId} onChanged={() => api.get(`/tasks/${id}`).then(setT)} />
+              <DepsBlock task={t} canEdit={perms.edit} onOpen={setId} onChange={setT} />
             </div>
 
             {/* Действия */}

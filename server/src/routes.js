@@ -253,14 +253,20 @@ api.delete('/projects/:id', requireRole('admin', 'manager'), wrap((req) => {
 }));
 
 /* ---------- tasks ---------- */
-const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'position'];
+const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'position', 'parent_id'];
 const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name, cb.name creator_name, cb.color creator_color,
     (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.task_id = t.id) tracked_sec,
     (SELECT COUNT(*) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') comments_count,
     (SELECT MAX(id) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') last_comment_id,
     (SELECT COUNT(*) FROM files f WHERE f.task_id = t.id) files_count,
     (SELECT GROUP_CONCAT(user_id) FROM task_members m WHERE m.task_id = t.id AND m.role = 'coassignee') coassignee_ids,
-    (SELECT GROUP_CONCAT(user_id) FROM task_members m WHERE m.task_id = t.id AND m.role = 'observer') observer_ids
+    (SELECT GROUP_CONCAT(user_id) FROM task_members m WHERE m.task_id = t.id AND m.role = 'observer') observer_ids,
+    (SELECT COUNT(*) FROM task_checklist k WHERE k.task_id = t.id) check_total,
+    (SELECT COUNT(*) FROM task_checklist k WHERE k.task_id = t.id AND k.done = 1) check_done,
+    (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id) sub_total,
+    (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'done') sub_done,
+    (SELECT COUNT(*) FROM task_deps dd JOIN tasks b ON b.id = dd.blocked_by_id WHERE dd.task_id = t.id AND b.status != 'done') blocked_count,
+    (SELECT title FROM tasks pt WHERE pt.id = t.parent_id) parent_title
   FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id JOIN projects p ON p.id = t.project_id
   LEFT JOIN users cb ON cb.id = t.created_by`;
 
@@ -306,11 +312,33 @@ api.get('/tasks', wrap((req) => {
 api.get('/tasks/:id', wrap((req) => {
   const t = getTask(idParam(req));
   if (!t) throw notFound();
-  return t;
+  return taskDetails(t);
 }));
+// Полная карточка: чек-лист, подзадачи, зависимости
+function taskDetails(t) {
+  return {
+    ...t,
+    checklist: all('SELECT k.*, u.name done_by_name FROM task_checklist k LEFT JOIN users u ON u.id = k.done_by WHERE k.task_id = ? ORDER BY k.position, k.id', t.id),
+    subtasks: all(`SELECT s.id, s.title, s.status, s.due_date, s.assignee_id, u.name assignee_name, u.color assignee_color
+      FROM tasks s LEFT JOIN users u ON u.id = s.assignee_id WHERE s.parent_id = ? ORDER BY s.status = 'done', s.id`, t.id),
+    blocked_by: all(`SELECT b.id, b.title, b.status, p.name project_name FROM task_deps d JOIN tasks b ON b.id = d.blocked_by_id
+      JOIN projects p ON p.id = b.project_id WHERE d.task_id = ? ORDER BY b.status = 'done', b.id`, t.id),
+    blocks: all(`SELECT b.id, b.title, b.status FROM task_deps d JOIN tasks b ON b.id = d.task_id WHERE d.blocked_by_id = ? ORDER BY b.id`, t.id),
+  };
+}
+// Родитель подзадачи: из того же проекта, не сама задача и без циклов
+function checkParent(taskId, parentId, projectId) {
+  if (!parentId) return;
+  const p = get('SELECT id, project_id, parent_id FROM tasks WHERE id = ?', parentId);
+  if (!p) throw bad('Родительская задача не найдена');
+  if (Number(p.project_id) !== Number(projectId)) throw bad('Подзадача должна быть в том же проекте');
+  for (let cur = p, n = 0; cur && n < 50; cur = cur.parent_id && get('SELECT id, parent_id FROM tasks WHERE id = ?', cur.parent_id), n++)
+    if (taskId && cur.id === taskId) throw bad('Нельзя сделать задачу подзадачей самой себя');
+}
 api.post('/tasks', wrap((req) => {
   const data = pick(req.body, TASK_FIELDS);
   required(data, 'project_id', 'title');
+  checkParent(null, data.parent_id, data.project_id);
   data.created_by = req.user.id;
   if (data.status === 'done') data.completed_at = nowIso();
   const id = tx(() => {
@@ -318,6 +346,9 @@ api.post('/tasks', wrap((req) => {
     systemComment(id, req.user.id, 'создал задачу');
     setTaskMembers(id, 'coassignee', req.body.coassignee_ids, req.user.id);
     setTaskMembers(id, 'observer', req.body.observer_ids, req.user.id);
+    if (Array.isArray(req.body.checklist)) req.body.checklist.map((x) => String(x || '').trim()).filter(Boolean)
+      .forEach((text, i) => insert('task_checklist', { task_id: id, position: i, text: text.slice(0, 500) }));
+    if (data.parent_id) systemComment(data.parent_id, req.user.id, `добавил подзадачу «${data.title}»`);
     return id;
   });
   const pname = get('SELECT name FROM projects WHERE id = ?', data.project_id)?.name;
@@ -330,6 +361,7 @@ api.put('/tasks/:id', wrap((req) => {
   if (!before) throw notFound();
   const data = pick(req.body, TASK_FIELDS);
   const perms = taskPerms(req.user, before);
+  if ('parent_id' in data) checkParent(id, data.parent_id, data.project_id ?? before.project_id);
   const statusChange = data.status && data.status !== before.status;
   delete data.status;
   // Изменились ли «содержательные» поля (всё, кроме статуса)?
@@ -361,7 +393,7 @@ api.put('/tasks/:id', wrap((req) => {
     setTaskMembers(id, 'coassignee', req.body.coassignee_ids, req.user.id);
     setTaskMembers(id, 'observer', req.body.observer_ids, req.user.id);
   });
-  return getTask(id);
+  return taskDetails(getTask(id));
 }));
 api.delete('/tasks/:id', wrap((req) => {
   const id = idParam(req);
@@ -372,6 +404,76 @@ api.delete('/tasks/:id', wrap((req) => {
   run('DELETE FROM tasks WHERE id = ?', id);
   files.forEach((f) => removeStored(f.stored));
   return { ok: true };
+}));
+
+/* ---------- чек-лист задачи ---------- */
+// Пункты отмечают и добавляют все, кто может работать с задачей (исполнитель, соисполнители, постановщик, админ)
+function checklistTask(req, taskId) {
+  const t = getTask(taskId);
+  if (!t) throw notFound();
+  if (!taskPerms(req.user, t).status) throw new HttpError(403, 'Чек-лист меняют исполнитель, соисполнители, постановщик или администратор');
+  return t;
+}
+const checkItem = (cid) => get('SELECT * FROM task_checklist WHERE id = ?', cid) || (() => { throw notFound(); })();
+api.post('/tasks/:id/checklist', wrap((req) => {
+  const id = idParam(req);
+  checklistTask(req, id);
+  const lines = String(req.body?.text || '').split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 100);
+  if (!lines.length) throw bad('Пустой пункт');
+  let pos = (get('SELECT MAX(position) m FROM task_checklist WHERE task_id = ?', id)?.m ?? -1) + 1;
+  tx(() => lines.forEach((text) => insert('task_checklist', { task_id: id, position: pos++, text: text.slice(0, 500) })));
+  return taskDetails(getTask(id)).checklist;
+}));
+api.put('/checklist/:id', wrap((req) => {
+  const item = checkItem(idParam(req));
+  checklistTask(req, item.task_id);
+  const data = {};
+  if (req.body.text !== undefined) { data.text = String(req.body.text).trim().slice(0, 500); if (!data.text) throw bad('Пустой пункт'); }
+  if (req.body.done !== undefined) {
+    data.done = req.body.done ? 1 : 0;
+    data.done_by = data.done ? req.user.id : null;
+    data.done_at = data.done ? nowIso() : null;
+  }
+  update('task_checklist', item.id, data);
+  return taskDetails(getTask(item.task_id)).checklist;
+}));
+api.delete('/checklist/:id', wrap((req) => {
+  const item = checkItem(idParam(req));
+  checklistTask(req, item.task_id);
+  run('DELETE FROM task_checklist WHERE id = ?', item.id);
+  return taskDetails(getTask(item.task_id)).checklist;
+}));
+api.post('/tasks/:id/checklist/order', wrap((req) => {
+  const id = idParam(req);
+  checklistTask(req, id);
+  const order = Array.isArray(req.body?.ids) ? req.body.ids.map(Number) : [];
+  tx(() => order.forEach((cid, i) => run('UPDATE task_checklist SET position = ? WHERE id = ? AND task_id = ?', i, cid, id)));
+  return taskDetails(getTask(id)).checklist;
+}));
+
+/* ---------- зависимости: «задачу можно начать после …» ---------- */
+api.put('/tasks/:id/deps', wrap((req) => {
+  const id = idParam(req);
+  const t = getTask(id);
+  if (!t) throw notFound();
+  if (!taskPerms(req.user, t).edit) throw new HttpError(403, 'Зависимости меняет постановщик или администратор');
+  const list = [...new Set((Array.isArray(req.body?.blocked_by) ? req.body.blocked_by : []).map(Number).filter((x) => x && x !== id))];
+  // Нет циклов: ни одна из блокирующих задач не должна (через цепочку) ждать эту
+  const waitsFor = (from, target, seen = new Set()) => {
+    if (from === target) return true;
+    if (seen.has(from)) return false;
+    seen.add(from);
+    return all('SELECT blocked_by_id b FROM task_deps WHERE task_id = ?', from).some((r) => waitsFor(r.b, target, seen));
+  };
+  for (const b of list) {
+    if (!get('SELECT 1 FROM tasks WHERE id = ?', b)) throw bad('Задача не найдена');
+    if (waitsFor(b, id)) throw bad('Получается замкнутый круг зависимостей');
+  }
+  tx(() => {
+    run('DELETE FROM task_deps WHERE task_id = ?', id);
+    list.forEach((b) => run('INSERT INTO task_deps (task_id, blocked_by_id) VALUES (?, ?)', id, b));
+  });
+  return taskDetails(getTask(id));
 }));
 
 /* ---------- комментарии к задачам (чат) ---------- */
@@ -414,6 +516,8 @@ api.post('/tasks/:id/work', wrap((req) => {
 
   if (action === 'start') {
     if (t.status === 'done') throw bad('Задача закрыта. Сначала возобновите её');
+    const blockers = all(`SELECT b.title FROM task_deps d JOIN tasks b ON b.id = d.blocked_by_id WHERE d.task_id = ? AND b.status != 'done'`, id);
+    if (blockers.length) throw bad(`Сначала нужно закрыть: ${blockers.map((b) => `«${b.title}»`).join(', ')}`);
     tx(() => {
       if (t.status !== 'in_progress') {
         update('tasks', id, { status: 'in_progress', completed_at: null });
@@ -426,7 +530,7 @@ api.post('/tasks/:id/work', wrap((req) => {
       insert('timer_sessions', { ...params, user_id: req.user.id, accumulated_sec: 0, paused: 0 });
     });
     logActivity(req.user.id, 'task', id, 'start', `взял в работу задачу «${t.title}»`);
-    return { task: getTask(id), timer: timerState(req.user.id) };
+    return { task: taskDetails(getTask(id)), timer: timerState(req.user.id) };
   }
 
   if (action === 'pause' || action === 'close') {
@@ -449,7 +553,7 @@ api.post('/tasks/:id/work', wrap((req) => {
     });
     logActivity(req.user.id, 'task', id, action === 'close' ? 'done' : 'pause',
       `${action === 'close' ? 'закрыл' : 'приостановил'} задачу «${t.title}»`);
-    return { task: getTask(id), timer: timerState(req.user.id), worked_sec: worked };
+    return { task: taskDetails(getTask(id)), timer: timerState(req.user.id), worked_sec: worked };
   }
   throw bad('Неизвестное действие');
 }));

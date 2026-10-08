@@ -259,6 +259,48 @@ const MIGRATIONS = [
     addColumn(d, 'deals', 'contract_no', 'TEXT');
     addColumn(d, 'deals', 'contract_date', 'TEXT');
   },
+  // 8. Задачи: чек-листы, подзадачи, зависимости, повторения
+  (d) => {
+    d.exec(`CREATE TABLE IF NOT EXISTS task_checklist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      text TEXT NOT NULL,
+      done INTEGER NOT NULL DEFAULT 0,
+      done_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      done_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist(task_id, position);
+    CREATE TABLE IF NOT EXISTS task_deps (
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      blocked_by_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      PRIMARY KEY (task_id, blocked_by_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_deps_blocker ON task_deps(blocked_by_id);
+    CREATE TABLE IF NOT EXISTS task_recurrences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      description TEXT,
+      assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      coassignee_ids TEXT,
+      observer_ids TEXT,
+      checklist TEXT,
+      freq TEXT NOT NULL CHECK (freq IN ('daily','weekly','monthly','yearly')),
+      every INTEGER NOT NULL DEFAULT 1,
+      weekdays TEXT,
+      monthday INTEGER,
+      due_days INTEGER NOT NULL DEFAULT 0,
+      next_date TEXT NOT NULL,
+      end_date TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`);
+    addColumn(d, 'tasks', 'parent_id', 'INTEGER REFERENCES tasks(id) ON DELETE CASCADE');
+    addColumn(d, 'tasks', 'recurrence_id', 'INTEGER REFERENCES task_recurrences(id) ON DELETE SET NULL');
+    d.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)');
+  },
 ];
 
 {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Info, Star, MoreHorizontal, List, ChartGantt, Kanban, Clock, Plus, Search, User, X, ChevronDown, ChevronRight,
-  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo, MessageSquare,
+  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo, MessageSquare, ListChecks, GitBranch, Lock, CornerDownRight, Repeat,
 } from 'lucide-react';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
@@ -297,18 +297,18 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                   </tr>
                 </thead>
                 <tbody className="stagger">
-                  {tasks.map((t) => {
+                  {nestTasks(tasks).map((t) => {
                     const late = isOverdue(t);
                     const a = userMap[t.assignee_id];
                     return (
                       <tr key={t.id} onClick={() => onOpenTask(t.id)} className="border-b border-line last:border-0 hover:bg-canvas/50 cursor-pointer">
                         <td className="td pr-0"><TaskStatusIcon status={t.status} /></td>
                         <td className="td whitespace-normal">
+                          <div className={cx(t._child && 'pl-5 relative before:absolute before:left-1.5 before:top-0 before:h-3 before:w-2.5 before:border-l-2 before:border-b-2 before:border-line-strong before:rounded-bl-md')}>
                           <div className={cx('text-[13.5px] font-[450]', t.status === 'done' ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</div>
                           {t.description && <div className="text-[12px] text-ink-3 line-clamp-1 max-w-[560px]">{t.description}</div>}
-                          {t.comments_count > 0 && (
-                            <span className="inline-flex items-center gap-1 mt-0.5 text-[11.5px] text-violet font-medium"><MessageSquare size={12} />{t.comments_count}</span>
-                          )}
+                          <TaskMeta t={t} />
+                          </div>
                         </td>
                         <td className="td"><TaskStatusPill status={t.status} /></td>
                         <td className="td">
@@ -333,6 +333,29 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
       )}
     </section>
   );
+}
+
+// Подзадачи — сразу под родителем (если родитель тоже в списке)
+function nestTasks(list) {
+  const ids = new Set(list.map((t) => t.id));
+  const kids = {};
+  for (const t of list) if (t.parent_id && ids.has(t.parent_id)) (kids[t.parent_id] ??= []).push(t);
+  const out = [];
+  const walk = (t, depth) => { out.push(depth ? { ...t, _child: true } : t); (kids[t.id] || []).forEach((k) => walk(k, depth + 1)); };
+  list.filter((t) => !(t.parent_id && ids.has(t.parent_id))).forEach((t) => walk(t, 0));
+  return out;
+}
+
+// Значки под названием: обсуждение, чек-лист, подзадачи, ожидание других задач
+function TaskMeta({ t }) {
+  const items = [];
+  if (t.comments_count > 0) items.push(<span key="c" className="text-violet font-medium inline-flex items-center gap-1"><MessageSquare size={12} />{t.comments_count}</span>);
+  if (t.check_total > 0) items.push(<span key="k" className={cx('inline-flex items-center gap-1', t.check_done === t.check_total && 'text-emerald-600')}><ListChecks size={12} />{t.check_done}/{t.check_total}</span>);
+  if (t.sub_total > 0) items.push(<span key="s" className="inline-flex items-center gap-1"><GitBranch size={12} />{t.sub_done}/{t.sub_total}</span>);
+  if (t.blocked_count > 0 && t.status !== 'done') items.push(<span key="b" className="inline-flex items-center gap-1 text-amber-600 font-medium" title="Ждёт закрытия других задач"><Lock size={12} />ждёт {t.blocked_count}</span>);
+  if (t.parent_id && !t._child && t.parent_title) items.push(<span key="p" className="inline-flex items-center gap-1 truncate max-w-56"><CornerDownRight size={12} />{t.parent_title}</span>);
+  if (t.recurrence_id) items.push(<span key="r" className="inline-flex items-center gap-1" title="Повторяющаяся задача"><Repeat size={12} /></span>);
+  return items.length ? <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11.5px] text-ink-3">{items}</div> : null;
 }
 
 function Counter({ label, n, dot, tone }) {
