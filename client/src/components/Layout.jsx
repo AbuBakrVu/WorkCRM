@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Ticket, Timer, Users, Building2, Handshake, Wallet, Settings, LogOut, Search,
-  ChevronRight, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
+  Moon, Sun, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
@@ -35,6 +35,15 @@ const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();
   const [pinned, setPinned] = useStored('crm.sidebar.pinned', false);
+  const [theme, setTheme] = useStored('crm.theme', 'light');
+  useEffect(() => {
+    const el = document.documentElement;
+    if (el.classList.contains('dark') === (theme === 'dark')) return;
+    el.classList.add('theme-anim');
+    el.classList.toggle('dark', theme === 'dark');
+    const t = setTimeout(() => el.classList.remove('theme-anim'), 350);
+    return () => clearTimeout(t);
+  }, [theme]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [starred] = useStored('crm.starred', []);
@@ -64,7 +73,8 @@ export default function Layout() {
   const sidebar = (open, mobile = false) => (
     <aside className={cx('sb', open && 'sb-open', mobile && 'anim-slide-left')} onClick={mobile ? (e) => e.stopPropagation() : undefined}>
       {/* Профиль */}
-      <button onClick={() => nav('/settings')} className="sb-profile group text-left" title="Профиль и настройки">
+      <div className="sb-profile">
+      <button onClick={() => nav('/settings')} className="flex items-center gap-3 flex-1 min-w-0 text-left" title="Профиль и настройки">
         <span className="relative shrink-0">
           <Avatar user={user} size={44} ring={false} />
           <span className="absolute bottom-0 right-0 size-3 rounded-full bg-emerald-500 ring-2 ring-panel" />
@@ -73,8 +83,14 @@ export default function Layout() {
           <span className="block text-[14.5px] font-semibold text-ink truncate">{user.name}</span>
           <span className="block text-[12.5px] text-ink-3">{ROLES[user.role]}</span>
         </span>
-        <ChevronRight size={18} className="sb-fade sb-chev group-hover:translate-x-0.5" />
       </button>
+      {!mobile && (
+        <button onClick={() => setPinned((v) => !v)} title={pinned ? 'Открепить меню' : 'Закрепить меню открытым'}
+          className={cx('sb-fade shrink-0 size-8 rounded-lg grid place-items-center', pinned ? 'text-brand bg-brand/10' : 'text-ink-3 hover:text-ink hover:bg-canvas')}>
+          {pinned ? <PinOff size={16} /> : <Pin size={16} />}
+        </button>
+      )}
+      </div>
 
       {/* Поиск */}
       <div className="sb-search" role="button" tabIndex={0} title="Поиск (Ctrl+K)" onClick={() => setSearchOpen(true)} onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}>
@@ -103,11 +119,9 @@ export default function Layout() {
 
       {/* Действия */}
       <div className="sb-actions">
-        {open && mobile
-          ? <button className="sb-action" onClick={() => setMobileOpen(false)} title="Закрыть меню"><X size={19} strokeWidth={1.75} /></button>
-          : <button className={cx('sb-action', pinned && 'on')} onClick={() => setPinned((v) => !v)} title={pinned ? 'Открепить меню' : 'Закрепить меню открытым'}>
-              {pinned ? <PinOff size={19} strokeWidth={1.75} /> : <Pin size={19} strokeWidth={1.75} />}
-            </button>}
+        <button className="sb-action sb-theme" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}>
+              <Moon className="moon" size={19} strokeWidth={1.75} /><Sun className="sun" size={19} strokeWidth={1.75} />
+            </button>
         <button className="sb-action" onClick={() => nav('/settings')} title="Настройки"><Settings size={19} strokeWidth={1.75} /></button>
         <button className="sb-action" onClick={() => nav('/projects?newtask=1')} title="Новая задача"><Plus size={20} strokeWidth={1.75} /></button>
         <button className="sb-action" onClick={logout} title="Выйти"><LogOut size={19} strokeWidth={1.75} /></button>

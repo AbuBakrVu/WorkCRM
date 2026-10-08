@@ -26,6 +26,44 @@
 }
 
 html, body, #root { height: 100%; }
+
+/* ---------- Тёмная тема: переопределяем токены ---------- */
+html.dark {
+  color-scheme: dark;
+  --color-canvas: #0d1210;
+  --color-panel: #151b18;
+  --color-side: #121815;
+  --color-line: #242c28;
+  --color-line-strong: #323c37;
+  --color-ink: #e6ebe8;
+  --color-ink-2: #a9b3ad;
+  --color-ink-3: #6f7a74;
+  --color-brand: #2e8b59;
+  --color-brand-strong: #38a068;
+  --color-violet: #6cc390;
+  --color-st-planned: #56605a;
+  /* Цветные плашки Tailwind — приглушённые полупрозрачные */
+  --color-red-50: rgb(239 68 68 / .13);
+  --color-red-200: rgb(239 68 68 / .35);
+  --color-red-300: rgb(239 68 68 / .5);
+  --color-red-600: #f47c7c;
+  --color-red-700: #fca5a5;
+  --color-amber-50: rgb(245 158 11 / .13);
+  --color-amber-300: rgb(245 158 11 / .45);
+  --color-amber-600: #f2b84b;
+  --color-amber-700: #f6c96d;
+  --color-emerald-600: #4cc38a;
+  --color-emerald-700: #6fd3a2;
+}
+/* Тёмные «чернильные» элементы в тёмной теме становятся светлыми — текст на них тёмный */
+html.dark .bg-ink.text-white { color: var(--color-canvas); }
+html.dark .bg-ink\/25, html.dark .bg-ink\/20 { background-color: rgb(0 0 0 / .55); }
+html.dark .pill { background: color-mix(in srgb, var(--pc) 20%, transparent) !important; color: color-mix(in srgb, var(--pc) 50%, white) !important; }
+html.dark * { scrollbar-color: #2e3833 transparent; }
+html.dark *::-webkit-scrollbar-thumb { background: #2e3833; }
+html.dark .shadow-2xl, html.dark .shadow-xl { --tw-shadow-color: rgb(0 0 0 / .6); }
+html.theme-anim, html.theme-anim * { transition: background-color .3s, border-color .3s, color .2s !important; }
+.pill { color: var(--pc); background: var(--pb); }
 body {
   margin: 0;
   background: var(--color-canvas);
@@ -188,3 +226,7 @@ select.input { @apply pr-8 appearance-none bg-no-repeat;
 
 /* Низкий экран — компактнее */
 @media (max-height: 760px) { .sb-item { height: 46px } .sb { gap: 10px; padding-top: 16px; padding-bottom: 16px } }
+
+html.dark .sb { box-shadow: 0 24px 60px rgb(0 0 0 / .45); }
+html.dark .sb-action.on { color: #fff; }
+.sb-theme .sun { display: none } html.dark .sb-theme .sun { display: block } html.dark .sb-theme .moon { display: none }

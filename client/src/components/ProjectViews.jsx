@@ -46,7 +46,7 @@ export function TaskKanban({ tasks, userMap, onOpen, onPatch, onMove }) {
                   <div key={t.id} draggable onDragStart={() => setDragId(t.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(t.id)}
                     className={cx('group bg-panel rounded-[18px] border border-line p-3.5 cursor-pointer lift', dragId === t.id && 'opacity-40 rotate-1')}>
                     <div className="flex items-center gap-1.5">
-                      <span className="inline-flex items-center h-6 px-2 rounded-md text-[11.5px] font-semibold truncate max-w-[200px]" style={{ color: fg, background: bg }}>{t.project_name}</span>
+                      <span className="pill inline-flex items-center h-6 px-2 rounded-md text-[11.5px] font-semibold truncate max-w-[200px]" style={{ '--pc': fg, '--pb': bg }}>{t.project_name}</span>
                       {due?.late && <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-red-600"><Flag size={12} />срочно</span>}
                     </div>
                     <div className="text-[14px] font-semibold leading-snug mt-2.5">{t.title}</div>
@@ -171,7 +171,7 @@ export function ProjectGantt({ projects, onOpen }) {
                   <div key={'p' + p.id} className="h-11 relative border-b border-line">
                     <button onClick={() => onOpen(p.id)} title={`${p.name}: ${fmtDate(s)} — ${fmtDate(e)}`}
                       className="absolute top-2.5 h-6 rounded-full overflow-hidden text-left shadow-sm hover:brightness-95"
-                      style={{ left, width: w, background: `color-mix(in srgb, ${PROJECT_STATUS[p.status].color} 40%, white)` }}>
+                      style={{ left, width: w, background: `color-mix(in srgb, ${PROJECT_STATUS[p.status].color} 40%, var(--color-panel))` }}>
                       <div className="absolute inset-y-0 left-0" style={{ width: `${p.progress}%`, background: PROJECT_STATUS[p.status].color }} />
                       <span className="relative px-2.5 text-[11.5px] font-medium text-ink leading-6 whitespace-nowrap">{w > 90 ? `${p.name} · ${p.progress}%` : ''}</span>
                     </button>

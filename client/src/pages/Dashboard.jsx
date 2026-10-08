@@ -163,10 +163,10 @@ export default function Dashboard() {
           <div className="h-[210px]">
             <ResponsiveContainer>
               <BarChart data={taskDays} barGap={2} barCategoryGap="24%">
-                <CartesianGrid vertical={false} stroke="#eceef2" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#8a91a0' }} />
-                <YAxis tickLine={false} axisLine={false} width={24} allowDecimals={false} tick={{ fontSize: 11, fill: '#8a91a0' }} />
-                <Tooltip cursor={{ fill: '#f6f7f9' }} content={<ChartTip />} />
+                <CartesianGrid vertical={false} stroke="var(--color-line)" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-ink-3)' }} />
+                <YAxis tickLine={false} axisLine={false} width={24} allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-ink-3)' }} />
+                <Tooltip cursor={{ fill: 'var(--color-canvas)' }} content={<ChartTip />} />
                 <Bar dataKey="created" name="Создано" fill={C_EXPENSE} radius={[4, 4, 0, 0]} maxBarSize={14} />
                 <Bar dataKey="done" name="Закрыто" fill={C_INCOME} radius={[4, 4, 0, 0]} maxBarSize={14} />
               </BarChart>
@@ -243,10 +243,10 @@ export default function Dashboard() {
             <div className="h-[200px]">
               <ResponsiveContainer>
                 <BarChart data={finChart} barGap={2} barCategoryGap="28%">
-                  <CartesianGrid vertical={false} stroke="#eceef2" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#8a91a0' }} />
-                  <YAxis tickLine={false} axisLine={false} width={64} tick={{ fontSize: 11.5, fill: '#8a91a0' }} tickFormatter={(v) => fmtMoneyShort(v).replace(' ₽', '')} />
-                  <Tooltip cursor={{ fill: '#f6f7f9' }} content={<ChartTip money />} />
+                  <CartesianGrid vertical={false} stroke="var(--color-line)" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-ink-3)' }} />
+                  <YAxis tickLine={false} axisLine={false} width={64} tick={{ fontSize: 11.5, fill: 'var(--color-ink-3)' }} tickFormatter={(v) => fmtMoneyShort(v).replace(' ₽', '')} />
+                  <Tooltip cursor={{ fill: 'var(--color-canvas)' }} content={<ChartTip money />} />
                   <Bar dataKey="income" name="Доход" fill={C_INCOME} radius={[4, 4, 0, 0]} maxBarSize={22} />
                   <Bar dataKey="expense" name="Расход" fill={C_EXPENSE} radius={[4, 4, 0, 0]} maxBarSize={22} />
                 </BarChart>

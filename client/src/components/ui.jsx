@@ -45,7 +45,7 @@ export function StatusDot({ color, label, className }) {
 }
 
 export function Pill({ color, bg, children, className }) {
-  return <span className={cx('inline-flex items-center h-6 px-2 rounded-md text-[12px] font-medium', className)} style={{ color, background: bg }}>{children}</span>;
+  return <span className={cx('pill inline-flex items-center h-6 px-2 rounded-md text-[12px] font-medium', className)} style={{ '--pc': color, '--pb': bg }}>{children}</span>;
 }
 
 export function Progress({ value = 0, color, showLabel = true, width = 'w-14' }) {

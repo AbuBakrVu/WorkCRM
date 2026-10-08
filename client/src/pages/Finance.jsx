@@ -74,10 +74,10 @@ export default function Finance() {
           <div className="h-[240px]">
             <ResponsiveContainer>
               <BarChart data={chart} barGap={2} barCategoryGap="24%">
-                <CartesianGrid vertical={false} stroke="#eceef2" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11.5, fill: '#8a91a0' }} />
-                <YAxis tickLine={false} axisLine={false} width={64} tick={{ fontSize: 11.5, fill: '#8a91a0' }} tickFormatter={(v) => fmtMoneyShort(v).replace(' ₽', '')} />
-                <Tooltip cursor={{ fill: '#f6f7f9' }} content={<ChartTip money />} />
+                <CartesianGrid vertical={false} stroke="var(--color-line)" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11.5, fill: 'var(--color-ink-3)' }} />
+                <YAxis tickLine={false} axisLine={false} width={64} tick={{ fontSize: 11.5, fill: 'var(--color-ink-3)' }} tickFormatter={(v) => fmtMoneyShort(v).replace(' ₽', '')} />
+                <Tooltip cursor={{ fill: 'var(--color-canvas)' }} content={<ChartTip money />} />
                 <Bar dataKey="income" name="Доход" fill={C_INCOME} radius={[4, 4, 0, 0]} maxBarSize={20} />
                 <Bar dataKey="expense" name="Расход" fill={C_EXPENSE} radius={[4, 4, 0, 0]} maxBarSize={20} />
               </BarChart>
