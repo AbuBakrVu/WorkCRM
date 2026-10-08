@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Info, Star, MoreHorizontal, List, ChartGantt, Kanban, Clock, Plus, Search, User, X, ChevronDown, ChevronRight,
-  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo, MessageSquare, ListChecks, GitBranch, Lock, CornerDownRight, Repeat,
+  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo, MessageSquare, ListChecks, GitBranch, Lock, CornerDownRight, Repeat, Upload,
 } from 'lucide-react';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
@@ -13,10 +13,11 @@ import { ProjectFormModal } from '../components/ProjectForm';
 import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskStatusPill, TaskWorkActions, isOverdue } from '../components/Tasks';
 import { RecurrenceList } from '../components/Recurrence';
 import { SavedViews } from '../components/SavedViews';
+import { ImportModal } from '../components/Import';
 import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
 
 export default function Projects() {
-  const { users, bump, toast, startTimer, startWork, askWork } = useApp();
+  const { users, bump, toast, startTimer, startWork, askWork, isManager } = useApp();
   const { data: projectsData, loading } = useLoad('/projects');
   const { data: tasksData, setData: setTasks } = useLoad('/tasks');
   const [params, setParams] = useSearchParams();
@@ -31,6 +32,7 @@ export default function Projects() {
   const [taskId, setTaskId] = useState(null);
   const [taskForm, setTaskForm] = useState(null);      // { projectId } | null
   const [projectForm, setProjectForm] = useState(null); // {} — новый, project — редактирование
+  const [importing, setImporting] = useState(false);
 
   // Переходы из поиска, дашборда, избранного: ?open=<проект>&task=<задача>&new=1
   useEffect(() => {
@@ -127,6 +129,7 @@ export default function Projects() {
           <p className="text-ink-2 text-[14px] mt-1 reveal-sub">Организации, которые вы обслуживаете, и задачи по каждой из них.</p>
         </div>
         <div className="flex items-center gap-2">
+          {isManager && <Button icon={Upload} onClick={() => setImporting(true)}>Импорт задач</Button>}
           <Button icon={Download} onClick={exportCsv}>Экспорт задач</Button>
           <Button variant="primary" icon={Plus} onClick={() => setProjectForm({})}>Новый проект</Button>
         </div>
@@ -225,6 +228,7 @@ export default function Projects() {
       </div>
 
       <TaskDrawer id={taskId} onClose={() => setTaskId(null)} />
+      {importing && <ImportModal kind="tasks" onClose={() => setImporting(false)} />}
       <TaskFormModal open={!!taskForm} projectId={taskForm?.projectId} onClose={() => setTaskForm(null)}
         onSaved={(t) => setExpanded((e) => (e.includes(t.project_id) ? e : [...e, t.project_id]))} />
       <ProjectFormModal open={!!projectForm} project={projectForm?.id ? projectForm : null} onClose={() => setProjectForm(null)}

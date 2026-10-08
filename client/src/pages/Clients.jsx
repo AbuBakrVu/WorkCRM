@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Plus, Search, X, Building2, Phone, Mail, Pencil, FileClock } from 'lucide-react';
+import { Plus, Search, X, Building2, Phone, Mail, Pencil, FileClock, Upload } from 'lucide-react';
+import { ImportModal } from '../components/Import';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { ContractsView } from '../components/Contracts';
 import { api } from '../lib/api';
@@ -19,6 +20,7 @@ export default function Clients() {
   const [openId, setOpenId] = useState(null);
   const [form, setForm] = useState(null); // null | {} | client
   const [tab, setTab] = useStored('crm.clients.tab', 'list');
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const o = params.get('open'); if (o) setOpenId(Number(o));
@@ -32,7 +34,8 @@ export default function Clients() {
   return (
     <div>
       <PageHeader title="Клиенты" subtitle="Организации и контакты: проекты, заявки, сделки и оплаты по каждому клиенту"
-        actions={tab === 'list' && <Button variant="primary" icon={Plus} onClick={() => setForm({})}>Новый клиент</Button>} />
+        actions={tab === 'list' && <>{isManager && <Button icon={Upload} onClick={() => setImporting(true)}>Импорт</Button>}<Button variant="primary" icon={Plus} onClick={() => setForm({})}>Новый клиент</Button></>} />
+      {importing && <ImportModal kind="clients" onClose={() => setImporting(false)} />}
       <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'list', label: 'Клиенты', icon: Building2 }, { value: 'contracts', label: 'Абонентское обслуживание', icon: FileClock }]} /></div>
       {tab === 'contracts' ? <ContractsView /> : (<>
       <div className="flex flex-wrap items-center gap-2 mb-4">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, X, Package, Wrench, Pencil } from 'lucide-react';
+import { Plus, Search, X, Package, Wrench, Pencil, Upload } from 'lucide-react';
+import { ImportModal } from '../components/Import';
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { VAT_RATES, UNITS } from '../lib/constants';
@@ -14,6 +15,7 @@ export default function Catalog() {
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('all');
   const [form, setForm] = useState(null);
+  const [importing, setImporting] = useState(false);
   const list = useMemo(() => {
     const ql = q.trim().toLowerCase();
     return (data || []).filter((x) => (kind === 'all' || x.kind === kind) && (!ql || `${x.name} ${x.sku || ''}`.toLowerCase().includes(ql)));
@@ -22,7 +24,8 @@ export default function Catalog() {
   return (
     <div>
       <PageHeader title="Каталог" subtitle="Товары и услуги с ценами — подставляются в позиции сделки и счета"
-        actions={isManager && <Button variant="primary" icon={Plus} onClick={() => setForm({})}>Добавить</Button>} />
+        actions={isManager && <><Button icon={Upload} onClick={() => setImporting(true)}>Импорт</Button><Button variant="primary" icon={Plus} onClick={() => setForm({})}>Добавить</Button></>} />
+      {importing && <ImportModal kind="catalog" onClose={() => setImporting(false)} onDone={reload} />}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <Segmented value={kind} onChange={setKind} items={[{ value: 'all', label: 'Все', count: data.length }, { value: 'service', label: 'Услуги', count: data.filter((x) => x.kind === 'service').length }, { value: 'goods', label: 'Товары', count: data.filter((x) => x.kind === 'goods').length }]} />
         <div className={cx('flex items-center gap-1.5 h-9 px-3 rounded-full border bg-panel', q ? 'border-violet/40' : 'border-line')}>
