@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2, Circle, CircleDot, Play, Pencil, Calendar, Clock, FolderOpen, Send, Trash2, MessageSquare, Paperclip, FileText,
-  Download, Square, MoreHorizontal, Plus, X, Users, RotateCcw, Pause, PauseCircle, Lock, Timer, ChevronDown,
+  Download, Square, MoreHorizontal, Plus, X, Users, RotateCcw, Pause, PauseCircle, Lock, Timer, ChevronDown, Repeat,
 } from 'lucide-react';
 import { useApp, useNow, timerSeconds } from '../lib/store';
 import { taskPerms } from '../lib/perms';
@@ -9,6 +9,7 @@ import { api, fileUrl, fmtSize } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
 import { ChecklistBlock, SubtasksBlock, DepsBlock } from './TaskExtras';
+import { RecurrenceFields, recurrenceBody, ruleText } from './Recurrence';
 import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
 
 export const isOverdue = (t) => t.status !== 'done' && t.due_date && t.due_date < todayStr();
@@ -90,7 +91,8 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
   useEffect(() => {
     if (!open) return;
     setErrors({});
-    setF(task ? { ...task } : { project_id: projectId || null, title: '', description: '', status: 'todo', assignee_id: null, due_date: null, coassignee_ids: [], observer_ids: [] });
+    setF(task ? { ...task } : { project_id: projectId || null, title: '', description: '', status: 'todo', assignee_id: null, due_date: null, coassignee_ids: [], observer_ids: [],
+      repeat: false, freq: 'monthly', every: 1, next_date: todayStr(), due_days: 3, checklistText: '' });
   }, [open, task, projectId]);
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
 
@@ -107,7 +109,13 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
       const body = { project_id: +f.project_id, title: f.title.trim(), description: f.description.trim(),
         assignee_id: f.assignee_id ? +f.assignee_id : null, due_date: f.due_date || null,
         coassignee_ids: f.coassignee_ids || [], observer_ids: f.observer_ids || [] };
-      const saved = task ? await api.put(`/tasks/${task.id}`, body) : await api.post('/tasks', body);
+      const checklist = (f.checklistText || '').split('\n').map((x) => x.trim()).filter(Boolean);
+      if (!task && f.repeat) {
+        const r = await api.post('/recurrences', { ...body, checklist, ...recurrenceBody(f) });
+        toast(`Повторяющаяся задача: ${ruleText(r)}. Следующая — ${fmtDate(r.next_date)}`);
+        bump(); onClose(); return;
+      }
+      const saved = task ? await api.put(`/tasks/${task.id}`, body) : await api.post('/tasks', { ...body, checklist });
       toast(task ? 'Задача сохранена' : 'Задача создана');
       bump(); onSaved?.(saved); onClose();
     } catch (x) { toast(x.message, 'error'); } finally { setBusy(false); }
@@ -135,10 +143,23 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
           <Field label="Исполнитель">
             <Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" search options={userOptions(users)} />
           </Field>
-          <Field label="Крайний срок"><input type="date" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>
+          {f.repeat ? <div /> : <Field label="Крайний срок"><input type="date" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>}
           <Field label="Соисполнители"><UserPicker users={users} value={f.coassignee_ids || []} onChange={set('coassignee_ids')} /></Field>
           <Field label="Наблюдатели"><UserPicker users={users} value={f.observer_ids || []} onChange={set('observer_ids')} /></Field>
         </div>
+        {!task && (<>
+          <Field label="Чек-лист" hint="Необязательно. Каждая строка — отдельный пункт">
+            <textarea className="input" rows={2} value={f.checklistText || ''} onChange={set('checklistText')} placeholder={'Купить кабель\nПротянуть линию\nПротестировать'} />
+          </Field>
+          <div className={cx('rounded-2xl border transition-colors', f.repeat ? 'border-brand/40 bg-brand/[.04]' : 'border-line')}>
+            <label className="flex items-center gap-2.5 px-4 h-11 cursor-pointer text-[13.5px] font-medium">
+              <input type="checkbox" checked={!!f.repeat} onChange={(e) => set('repeat')(e.target.checked)} className="accent-[var(--color-brand)] size-4" />
+              <Repeat size={15} className="text-brand" />Повторять задачу
+              {f.repeat && <span className="ml-auto text-[12px] text-ink-3 font-normal">{ruleText(f)}</span>}
+            </label>
+            {f.repeat && <div className="px-4 pb-4"><RecurrenceFields r={f} set={set} /></div>}
+          </div>
+        </>)}
       </form>
     </Modal>
   );

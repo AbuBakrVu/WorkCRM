@@ -11,6 +11,7 @@ import { fmtDate, fmtHM, todayStr, timeAgo } from '../lib/format';
 import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar, Segmented, SearchList, userOptions, nameOptions } from '../components/ui';
 import { ProjectFormModal } from '../components/ProjectForm';
 import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskStatusPill, TaskWorkActions, isOverdue } from '../components/Tasks';
+import { RecurrenceList } from '../components/Recurrence';
 import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
 
 export default function Projects() {
@@ -136,11 +137,12 @@ export default function Projects() {
           { value: 'kanban', label: 'Канбан задач', icon: Kanban },
           { value: 'gantt', label: 'Диаграмма Ганта', icon: ChartGantt },
           { value: 'time', label: 'Учёт времени', icon: Clock },
+          { value: 'recurring', label: 'Повторяющиеся', icon: Repeat },
         ]} />
       </div>
 
       {/* Панель фильтров */}
-      {view !== 'time' && view !== 'gantt' && (
+      {view !== 'time' && view !== 'gantt' && view !== 'recurring' && (
         <div className="flex flex-wrap items-center gap-2 mt-4">
           {view === 'list' && (
             <Segmented value={filter} onChange={setFilter}
@@ -212,6 +214,8 @@ export default function Projects() {
             userMap={userMap} onOpen={setTaskId} onPatch={patchTask} />
         ) : view === 'gantt' ? (
           <ProjectGantt projects={projects} onOpen={(id) => { setView('list'); setExpanded((e) => [...new Set([...e, id])]); }} />
+        ) : view === 'recurring' ? (
+          <RecurrenceList />
         ) : (
           <ProjectTimeView projects={projects} />
         )}

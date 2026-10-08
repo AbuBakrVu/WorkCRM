@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { all, get, run, tx, logActivity, UPLOAD_DIR } from './db.js';
+import { nextDate, addDays, todayMsk } from './recurrence.js';
 import {
   requireAuth, requireRole, issueToken, clearToken, hashPassword, checkPassword,
   publicUser, loginRateLimit,
@@ -403,6 +404,85 @@ api.delete('/tasks/:id', wrap((req) => {
   const files = all('SELECT stored FROM files WHERE task_id = ?', id);
   run('DELETE FROM tasks WHERE id = ?', id);
   files.forEach((f) => removeStored(f.stored));
+  return { ok: true };
+}));
+
+/* ---------- повторяющиеся задачи ---------- */
+const REC_FIELDS = ['project_id', 'title', 'description', 'assignee_id', 'freq', 'every', 'weekdays', 'monthday', 'due_days', 'next_date', 'end_date', 'active'];
+const REC_SELECT = `SELECT r.*, p.name project_name, u.name assignee_name, u.color assignee_color,
+    (SELECT COUNT(*) FROM tasks t WHERE t.recurrence_id = r.id) tasks_count
+  FROM task_recurrences r JOIN projects p ON p.id = r.project_id LEFT JOIN users u ON u.id = r.assignee_id`;
+const shapeRec = (r) => r && ({ ...r, coassignee_ids: ids(r.coassignee_ids), observer_ids: ids(r.observer_ids), checklist: r.checklist ? JSON.parse(r.checklist) : [] });
+function recData(req, before = {}) {
+  const data = pick(req.body, REC_FIELDS);
+  const m = { ...before, ...data };
+  if (!['daily', 'weekly', 'monthly', 'yearly'].includes(m.freq)) throw bad('Неверная периодичность');
+  if (data.every != null) data.every = Math.min(365, Math.max(1, Math.round(Number(data.every)) || 1));
+  if (data.due_days != null) data.due_days = Math.min(365, Math.max(0, Math.round(Number(data.due_days)) || 0));
+  if (data.monthday != null) data.monthday = Math.min(31, Math.max(1, Math.round(Number(data.monthday)) || 1));
+  for (const k of ['next_date', 'end_date']) if (data[k] && !/^\d{4}-\d{2}-\d{2}$/.test(data[k])) throw bad('Неверная дата');
+  if (Array.isArray(req.body.coassignee_ids)) data.coassignee_ids = req.body.coassignee_ids.map(Number).filter(Boolean).join(',') || null;
+  if (Array.isArray(req.body.observer_ids)) data.observer_ids = req.body.observer_ids.map(Number).filter(Boolean).join(',') || null;
+  if (Array.isArray(req.body.checklist)) data.checklist = JSON.stringify(req.body.checklist.map((x) => String(x || '').trim().slice(0, 500)).filter(Boolean).slice(0, 100));
+  return data;
+}
+const recPerm = (user, r) => user.role === 'admin' || user.role === 'manager' || r.created_by === user.id;
+
+// Создаёт задачи по расписанию: всё, у чего дата запуска наступила (по МСК). Пропущенные дни не «догоняет» — одна задача.
+export function runRecurrences() {
+  const today = todayMsk();
+  const due = all('SELECT * FROM task_recurrences WHERE active = 1 AND next_date <= ?', today);
+  for (const r of due) {
+    try {
+      tx(() => {
+        let runDate = r.next_date;
+        // если сервер был выключен — берём последнюю наступившую дату, а не плодим копии
+        for (let n = nextDate(r, runDate, false, r.created_at.slice(0, 10)); n <= today; n = nextDate(r, n, false, r.created_at.slice(0, 10))) runDate = n;
+        const id = insert('tasks', { project_id: r.project_id, title: r.title, description: r.description, assignee_id: r.assignee_id,
+          status: 'todo', due_date: addDays(runDate, r.due_days || 0), created_by: r.created_by, recurrence_id: r.id });
+        run("INSERT INTO task_comments (task_id, user_id, kind, body) VALUES (?, ?, 'system', ?)", id, r.created_by, 'создал задачу по расписанию');
+        for (const uid of ids(r.coassignee_ids)) run("INSERT OR IGNORE INTO task_members (task_id, user_id, role) VALUES (?, ?, 'coassignee')", id, uid);
+        for (const uid of ids(r.observer_ids)) run("INSERT OR IGNORE INTO task_members (task_id, user_id, role) VALUES (?, ?, 'observer')", id, uid);
+        (r.checklist ? JSON.parse(r.checklist) : []).forEach((text, i) => insert('task_checklist', { task_id: id, position: i, text }));
+        const next = nextDate(r, runDate, false, r.created_at.slice(0, 10));
+        const ended = r.end_date && next > r.end_date;
+        run('UPDATE task_recurrences SET next_date = ?, active = ? WHERE id = ?', next, ended ? 0 : 1, r.id);
+      });
+    } catch (e) { console.error('Повторяющаяся задача', r.id, e.message); }
+  }
+}
+
+api.get('/recurrences', wrap(() => all(`${REC_SELECT} ORDER BY r.active DESC, r.next_date`).map(shapeRec)));
+api.post('/recurrences', wrap((req) => {
+  const data = recData(req);
+  required(data, 'project_id', 'title', 'freq');
+  data.next_date = data.next_date || todayMsk();
+  data.created_by = req.user.id;
+  // первая дата — ближайшая подходящая под правило, начиная с указанной
+  data.next_date = nextDate(data, data.next_date, true, todayMsk());
+  const id = insert('task_recurrences', data);
+  logActivity(req.user.id, 'project', data.project_id, 'recurrence', `настроил повторяющуюся задачу «${data.title}»`);
+  runRecurrences();
+  return shapeRec(get(`${REC_SELECT} WHERE r.id = ?`, id));
+}));
+api.put('/recurrences/:id', wrap((req) => {
+  const id = idParam(req);
+  const before = get('SELECT * FROM task_recurrences WHERE id = ?', id);
+  if (!before) throw notFound();
+  if (!recPerm(req.user, before)) throw new HttpError(403, 'Менять расписание может автор, менеджер или администратор');
+  const data = recData(req, before);
+  const m = { ...before, ...data };
+  if (data.next_date || data.freq || data.weekdays !== undefined || data.monthday !== undefined) data.next_date = nextDate(m, m.next_date, true, before.created_at.slice(0, 10));
+  update('task_recurrences', id, data);
+  runRecurrences();
+  return shapeRec(get(`${REC_SELECT} WHERE r.id = ?`, id));
+}));
+api.delete('/recurrences/:id', wrap((req) => {
+  const id = idParam(req);
+  const r = get('SELECT * FROM task_recurrences WHERE id = ?', id);
+  if (!r) throw notFound();
+  if (!recPerm(req.user, r)) throw new HttpError(403, 'Удалить расписание может автор, менеджер или администратор');
+  run('DELETE FROM task_recurrences WHERE id = ?', id);
   return { ok: true };
 }));
 

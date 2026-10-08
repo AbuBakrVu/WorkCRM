@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { api } from './routes.js';
+import { api, runRecurrences } from './routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -32,3 +32,8 @@ if (fs.existsSync(PUBLIC_DIR)) {
 }
 
 app.listen(PORT, () => console.log(`CRM запущена на http://localhost:${PORT}`));
+
+// Повторяющиеся задачи: проверка при старте и каждые 10 минут
+const tick = () => { try { runRecurrences(); } catch (e) { console.error(e); } };
+tick();
+setInterval(tick, 10 * 60 * 1000);
