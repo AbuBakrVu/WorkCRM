@@ -41,7 +41,9 @@ cd server && DATA_DIR=./dev-data npm run seed -- --force        # пересоз
   Любая новая колонка/таблица/индекс — ТОЛЬКО новой миграцией в конец массива (миграции выполняются и на новых базах). Для колонок используй хелпер `addColumn(d, table, col, def)`. Старые миграции не редактируй.
   SQLite `LIKE` не понимает регистр кириллицы — для поиска используй функцию `ulower()`.
 - `server/src/routes.js` — весь REST API под `/api`. Хелперы: `wrap` (ошибки → JSON), `pick(body, FIELDS)` (белый список полей — новые поля добавляй в соответствующий `*_FIELDS`), `insert/update`, `logActivity`. Права: `requireRole('admin','manager')`.
-- `server/src/auth.js` — сессии, роли `admin | manager | member`.
+- `server/src/auth.js` — сессии, роли `admin | manager | member`; клиенты из личного кабинета — отдельная таблица `portal_users` (токен с `pid`), им доступны только `/api/portal/*`. Шифрование секретов базы знаний — `encryptSecret/decryptSecret`.
+- `server/src/audit.js` — история изменений (пишется автоматически в `update()` для таблиц из `TRACKED`) и корзина: удаляй через `trashDelete(entity, table, id, title)` — снимок со всеми зависимыми строками, восстановление из «Настройки → Корзина».
+- `server/src/recurrence.js` — расчёт дат повторения (задачи, счета); планировщик — `tick()` в `index.js` (каждые 10 минут).
 - `client/src/lib/` — `api.js` (fetch-обёртка), `store.jsx` (контекст: user, users, clients, projects, таймер, `toast`, `bump()` — перезагрузить данные после изменения, `useLoad(url)`), `format.js` (даты/деньги/длительности, `parseDate` для дат SQLite в UTC), `constants.js` (статусы, приоритеты, цвета, подписи).
 - `client/src/components/ui.jsx` — UI-кит (Button, Modal, Drawer, Popover, Select, Field, StatusDot, Progress, AvatarStack, Stat…). Новые экраны собирай из него.
 - `client/src/pages/*` — страницы. Маршруты — `client/src/App.jsx`, меню — `NAV` в `components/Layout.jsx`.
