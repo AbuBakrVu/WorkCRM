@@ -301,6 +301,20 @@ const MIGRATIONS = [
     addColumn(d, 'tasks', 'recurrence_id', 'INTEGER REFERENCES task_recurrences(id) ON DELETE SET NULL');
     d.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)');
   },
+  // 9. Настройки приложения (ключи интеграций) и каталог товаров/услуг
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT);
+    CREATE TABLE IF NOT EXISTS catalog_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL DEFAULT 'service' CHECK (kind IN ('goods','service')),
+      name TEXT NOT NULL,
+      sku TEXT,
+      unit TEXT NOT NULL DEFAULT 'шт',
+      price REAL NOT NULL DEFAULT 0,
+      vat_rate TEXT,
+      description TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`),
 ];
 
 {

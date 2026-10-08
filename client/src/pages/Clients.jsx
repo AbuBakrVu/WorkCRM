@@ -5,7 +5,7 @@ import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { CLIENT_TYPE, PROJECT_STATUS, DEAL_STAGE, TICKET_STATUS } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate } from '../lib/format';
-import { RequisitesFields } from '../components/Requisites';
+import { RequisitesFields, InnButton } from '../components/Requisites';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, cx } from '../components/ui';
 
 export default function Clients() {
@@ -96,12 +96,13 @@ function ClientFormModal({ client, onClose, onSaved }) {
       <form onSubmit={submit} className="grid grid-cols-2 gap-3.5">
         <Field label="Название" className="col-span-2"><input className="input" value={f.name || ''} onChange={set('name')} autoFocus /></Field>
         <Field label="Тип"><Select value={f.type} onChange={set('type')} options={Object.entries(CLIENT_TYPE).map(([value, label]) => ({ value, label }))} /></Field>
-        <Field label="ИНН"><input className="input" value={f.inn || ''} onChange={set('inn')} inputMode="numeric" maxLength={12} /></Field>
+        <Field label="ИНН"><div className="flex gap-2"><input className="input" value={f.inn || ''} onChange={set('inn')} inputMode="numeric" maxLength={12} />
+          {f.type !== 'person' && <InnButton inn={f.inn} fill={(d) => setF((x) => ({ ...x, ...Object.fromEntries(Object.entries(d).filter(([k, v]) => v != null && k !== 'status' && !(k === 'name' && x.name))) }))} />}</div></Field>
         <Field label="Контактное лицо"><input className="input" value={f.contact_name || ''} onChange={set('contact_name')} /></Field>
         <Field label="Телефон"><input className="input" value={f.phone || ''} onChange={set('phone')} /></Field>
         <Field label="Email"><input className="input" type="email" value={f.email || ''} onChange={set('email')} /></Field>
         <Field label="Адрес"><input className="input" value={f.address || ''} onChange={set('address')} /></Field>
-        {f.type !== 'person' && <RequisitesFields f={f} set={set} open={!!(f.kpp || f.account || f.full_name)} title="Реквизиты для документов" />}
+        {f.type !== 'person' && <RequisitesFields f={f} set={set} withInn={false} open={!!(f.kpp || f.account || f.full_name)} title="Реквизиты для документов" />}
         <Field label="Заметки" className="col-span-2"><textarea className="input" rows={3} value={f.notes || ''} onChange={set('notes')} /></Field>
       </form>
     </Modal>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Ticket, Timer, Users, Building2, Handshake, Wallet, Settings, LogOut, Search,
-  Moon, Sun, CalendarDays, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
+  Moon, Sun, CalendarDays, Package, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
@@ -24,6 +24,7 @@ const NAV = [
   { section: 'Продажи', items: [
     { to: '/clients', label: 'Клиенты', icon: Building2 },
     { to: '/pipeline', label: 'Воронка сделок', icon: Handshake },
+    { to: '/catalog', label: 'Каталог', icon: Package },
   ] },
   { section: 'Финансы', manager: true, items: [
     { to: '/finance', label: 'Доходы и расходы', icon: Wallet },
@@ -31,7 +32,7 @@ const NAV = [
 ];
 
 const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets': 'Заявки', '/time': 'Учёт времени', '/team': 'Команда',
-  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки', '/calendar': 'Календарь' };
+  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки', '/calendar': 'Календарь', '/catalog': 'Каталог' };
 
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();

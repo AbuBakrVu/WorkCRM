@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Plus, Trash2, GripVertical } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Plus, Trash2, GripVertical, Package } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { DEAL_STAGE, VAT_RATES, VAT_MODE, UNITS } from '../lib/constants';
 import { fmtRub } from '../lib/format';
-import { Button, Modal, Field, Select, ConfirmButton, Segmented, Spinner, cx, userOptions, nameOptions } from './ui';
+import { Button, Modal, Field, Select, ConfirmButton, Segmented, Spinner, Popover, SearchList, FloatingPanel, cx, userOptions, nameOptions } from './ui';
 
 // Расчёт как на сервере: НДС сверху (above) или в т.ч. (included), округление построчно
 const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -25,6 +25,7 @@ export function calcItems(items, mode = 'above') {
 export function DealModal({ deal, onClose }) {
   const { users, clients, toast, bump, isManager } = useApp();
   const [companies, setCompanies] = useState([]);
+  const [catalog, setCatalog] = useState([]);
   const [f, setF] = useState(null);
   const [items, setItems] = useState([]);
   const [drag, setDrag] = useState(null);
@@ -32,6 +33,7 @@ export function DealModal({ deal, onClose }) {
   useEffect(() => {
     if (!deal) { setF(null); return; }
     api.get('/companies').then(setCompanies).catch(() => {});
+    api.get('/catalog').then((c) => setCatalog(c.filter((x) => x.active))).catch(() => {});
     if (deal.id) {
       setF(null);
       api.get(`/deals/${deal.id}`).then((d) => { setF(d); setItems(d.items.map(({ id, name, unit, qty, price, vat_rate }) => ({ key: id, name, unit, qty, price, vat_rate }))); })
@@ -50,6 +52,8 @@ export function DealModal({ deal, onClose }) {
 
   const setItem = (i, k) => (v) => setItems((list) => list.map((it, j) => (j === i ? { ...it, [k]: v?.target ? v.target.value : v } : it)));
   const addItem = () => setItems((list) => [...list, { key: Math.random(), name: '', unit: 'шт', qty: 1, price: '', vat_rate: defVat }]);
+  const fromCatalog = (c) => ({ key: Math.random(), name: c.name, unit: c.unit, qty: 1, price: c.price, vat_rate: c.vat_rate || defVat });
+  const pickInto = (i, c) => setItems((list) => list.map((it, j) => (j === i ? { ...fromCatalog(c), key: it.key, qty: it.qty || 1 } : it)));
   const delItem = (i) => setItems((list) => list.filter((_, j) => j !== i));
   const moveItem = (from, to) => setItems((list) => { const l = [...list]; const [x] = l.splice(from, 1); l.splice(to, 0, x); return l; });
 
@@ -110,7 +114,7 @@ export function DealModal({ deal, onClose }) {
                         <td className="pl-2 pt-3.5 text-ink-3 cursor-grab" draggable onDragStart={() => setDrag(i)} onDragEnd={() => setDrag(null)} title="Перетащите, чтобы изменить порядок">
                           <span className="flex items-center text-[11px] tabular"><GripVertical size={13} />{i + 1}</span>
                         </td>
-                        <td className="px-2 py-2"><textarea rows={1} className="input !min-h-9 resize-y" value={it.name} onChange={setItem(i, 'name')} placeholder="Товар или услуга" /></td>
+                        <td className="px-2 py-2"><NameCell value={it.name} onChange={setItem(i, 'name')} catalog={catalog} onPick={(c) => pickInto(i, c)} /></td>
                         <td className="px-2 py-2"><input type="number" min="0" step="any" className="input text-right tabular" value={it.qty} onChange={setItem(i, 'qty')} /></td>
                         <td className="px-2 py-2"><input className="input" list="crm-units" value={it.unit} onChange={setItem(i, 'unit')} /></td>
                         <td className="px-2 py-2"><input type="number" min="0" step="0.01" className="input text-right tabular" value={it.price} onChange={setItem(i, 'price')} placeholder="0,00" /></td>
@@ -125,7 +129,16 @@ export function DealModal({ deal, onClose }) {
               </div>
             )}
             <div className="flex flex-wrap items-end justify-between gap-4 px-4 py-3 border-t border-line first:border-t-0">
-              <Button size="sm" icon={Plus} onClick={addItem}>Добавить позицию</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" icon={Plus} onClick={addItem}>Добавить позицию</Button>
+                {catalog.length > 0 && (
+                  <Popover width={380} trigger={({ toggle }) => <Button size="sm" icon={Package} onClick={toggle}>Из каталога</Button>}>
+                    {({ close }) => <SearchList placeholder="Найти товар или услугу…" onEscape={close}
+                      items={catalog.map((c) => ({ value: c.id, label: c.name, hint: `${c.price.toLocaleString('ru-RU')} ₽/${c.unit}` }))}
+                      onPick={(id) => { const c = catalog.find((x) => x.id === id); if (c) setItems((l) => [...l, fromCatalog(c)]); }} />}
+                  </Popover>
+                )}
+              </div>
               {hasItems && (
                 <div className="text-[13px] tabular grid grid-cols-[auto_auto] gap-x-6 gap-y-1 text-right">
                   <span className="text-ink-3">Без НДС</span><span>{fmtRub(calc.net)}</span>
@@ -140,5 +153,28 @@ export function DealModal({ deal, onClose }) {
         </div>
       )}
     </Modal>
+  );
+}
+
+// Наименование позиции: при вводе подсказывает совпадения из каталога
+function NameCell({ value, onChange, catalog, onPick }) {
+  const ref = useRef(null);
+  const [focus, setFocus] = useState(false);
+  const q = (value || '').trim().toLowerCase();
+  const hits = q.length >= 2 ? catalog.filter((c) => c.name.toLowerCase().includes(q) && c.name.toLowerCase() !== q).slice(0, 6) : [];
+  return (
+    <>
+      <textarea ref={ref} rows={1} className="input !min-h-9 resize-none [field-sizing:content]" value={value} onChange={onChange} placeholder="Товар или услуга"
+        onFocus={() => setFocus(true)} onBlur={() => setTimeout(() => setFocus(false), 150)} />
+      <FloatingPanel open={focus && hits.length > 0} anchorRef={ref} onClose={() => setFocus(false)} minWidth={320}>
+        <div className="px-2 pb-1 text-[11px] text-ink-3">Из каталога</div>
+        {hits.map((c) => (
+          <button key={c.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { onPick(c); setFocus(false); }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-canvas text-left text-[13px]">
+            <span className="flex-1 truncate">{c.name}</span><span className="text-ink-3 tabular text-[12px]">{c.price.toLocaleString('ru-RU')} ₽/{c.unit}</span>
+          </button>
+        ))}
+      </FloatingPanel>
+    </>
   );
 }

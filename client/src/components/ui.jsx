@@ -213,7 +213,7 @@ function useFloating(open, anchorRef, panelRef, onClose, minWidth = 220) {
   return pos;
 }
 
-function FloatingPanel({ open, anchorRef, onClose, minWidth, children }) {
+export function FloatingPanel({ open, anchorRef, onClose, minWidth, children }) {
   const panelRef = useRef(null);
   const pos = useFloating(open, anchorRef, panelRef, onClose, minWidth);
   if (!open) return null;

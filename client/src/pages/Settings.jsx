@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { ROLES, USER_COLORS } from '../lib/constants';
@@ -26,9 +26,10 @@ export default function Settings() {
     <div className="max-w-[820px]">
       <PageHeader title="Настройки" subtitle="Профиль, безопасность и реквизиты компаний" />
       {isManager && (
-        <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Профиль' }, { value: 'companies', label: 'Мои компании' }]} /></div>
+        <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Профиль' }, { value: 'companies', label: 'Мои компании' },
+          ...(user.role === 'admin' ? [{ value: 'integrations', label: 'Интеграции' }] : [])]} /></div>
       )}
-      {isManager && tab === 'companies' ? <CompaniesSettings /> : (<>
+      {isManager && tab === 'companies' ? <CompaniesSettings /> : user.role === 'admin' && tab === 'integrations' ? <Integrations /> : (<>
       <Card className="p-6">
         <div className="flex items-center gap-4 mb-5">
           <Avatar user={{ ...user, ...f }} size={56} ring={false} />
@@ -54,5 +55,24 @@ export default function Settings() {
       </Card>
       </>)}
     </div>
+  );
+}
+
+function Integrations() {
+  const { toast } = useApp();
+  const [f, setF] = useState(null);
+  useEffect(() => { api.get('/app-settings').then(setF).catch((e) => toast(e.message, 'error')); }, [toast]);
+  if (!f) return null;
+  const save = async () => { try { await api.put('/app-settings', f); toast('Сохранено'); setF(await api.get('/app-settings')); } catch (e) { toast(e.message, 'error'); } };
+  return (
+    <Card className="p-6">
+      <h2 className="text-[15px] font-semibold">DaData — реквизиты по ИНН</h2>
+      <p className="text-[13px] text-ink-2 mt-1 mb-4">Вводите ИНН — название, КПП, ОГРН, адрес и руководитель заполнятся сами; по БИК подставляются банк и корр. счёт.
+        Ключ бесплатный: зарегистрируйтесь на <a href="https://dadata.ru" target="_blank" rel="noreferrer" className="text-violet hover:underline">dadata.ru</a> → Личный кабинет → «API-ключ» (10 000 запросов в день бесплатно).</p>
+      <div className="flex gap-2 max-w-[520px]">
+        <input className="input" value={f.dadata_key || ''} onChange={(e) => setF((x) => ({ ...x, dadata_key: e.target.value }))} placeholder="API-ключ" autoComplete="off" />
+        <Button variant="primary" onClick={save}>Сохранить</Button>
+      </div>
+    </Card>
   );
 }
