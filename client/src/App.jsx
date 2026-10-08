@@ -16,6 +16,8 @@ import Settings from './pages/Settings';
 import Calendar from './pages/Calendar';
 import Catalog from './pages/Catalog';
 import Invoices from './pages/Invoices';
+import Reports from './pages/Reports';
+import ClientReport from './pages/ClientReport';
 
 function Gate() {
   const { user, isManager } = useApp();
@@ -23,6 +25,7 @@ function Gate() {
   if (!user) return <Login />;
   return (
     <Routes>
+      {isManager && <Route path="report/client" element={<ClientReport />} />}
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
@@ -35,6 +38,7 @@ function Gate() {
         <Route path="catalog" element={<Catalog />} />
         {isManager && <Route path="finance" element={<Finance />} />}
         {isManager && <Route path="invoices" element={<Invoices />} />}
+        {isManager && <Route path="reports" element={<Reports />} />}
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
