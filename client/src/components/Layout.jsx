@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Ticket, Timer, Users, Building2, Handshake, Wallet, Settings, LogOut, Search,
-  ChevronsLeft, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
+  ChevronRight, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
@@ -34,7 +34,7 @@ const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets
 
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();
-  const [collapsed, setCollapsed] = useStored('crm.sidebar.collapsed', false);
+  const [pinned, setPinned] = useStored('crm.sidebar.pinned', false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [starred] = useStored('crm.starred', []);
@@ -52,94 +52,78 @@ export default function Layout() {
   const starredProjects = projects.filter((p) => starred.includes(p.id));
   const crumb = TITLES['/' + (loc.pathname.split('/')[1] || '')] || '';
 
-  const sidebar = (
-    <aside className={cx('flex h-full bg-side border-r border-line', collapsed ? 'w-[68px]' : 'w-[264px]')}>
-      {/* Иконка-рейл */}
-      <div className="w-[60px] shrink-0 flex flex-col items-center py-4 gap-3 border-r border-line">
-        <div className="size-9 rounded-full bg-brand flex items-center justify-center text-brand-ink shadow-sm">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="9.5" y="2.5" width="5" height="5" rx="1.3" transform="rotate(45 12 5)"/><rect x="9.5" y="16.5" width="5" height="5" rx="1.3" transform="rotate(45 12 19)"/><rect x="2.5" y="9.5" width="5" height="5" rx="1.3" transform="rotate(45 5 12)"/><rect x="16.5" y="9.5" width="5" height="5" rx="1.3" transform="rotate(45 19 12)"/></svg>
-        </div>
-        <div className="w-6 h-px bg-line my-1" />
-        {[['/tickets', Ticket, 'Заявки'], ['/time', Timer, 'Учёт времени'], ['/pipeline', Handshake, 'Воронка']].map(([to, I, t]) => (
-          <NavLink key={to} to={to} title={t} className={({ isActive }) => cx('size-9 rounded-full flex items-center justify-center transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-2 hover:bg-canvas')}>
-            <I size={17} />
-          </NavLink>
-        ))}
-        <div className="flex-1" />
-        <NavLink to="/settings" title="Настройки" className="size-9 rounded-full flex items-center justify-center text-ink-2 hover:bg-canvas"><Settings size={17} /></NavLink>
-        <Popover align="left" width={220} trigger={({ toggle }) => (
-          <button onClick={toggle} className="relative"><Avatar user={user} size={36} ring={false} /><span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-side" /></button>
-        )}>
-          {({ close }) => (<>
-            <div className="px-2.5 py-2 border-b border-line mb-1">
-              <div className="text-[13px] font-semibold truncate">{user.name}</div>
-              <div className="text-[12px] text-ink-3">{ROLES[user.role]}</div>
-            </div>
-            <MenuItem icon={Settings} onClick={() => { close(); nav('/settings'); }}>Профиль и пароль</MenuItem>
-            <MenuItem icon={LogOut} danger onClick={logout}>Выйти</MenuItem>
-          </>)}
-        </Popover>
+  const items = NAV.filter((s) => !s.manager || isManager);
+  const navItem = (i) => (
+    <NavLink key={i.to} to={i.to} end={i.end} title={i.label} className={({ isActive }) => cx('sb-item', isActive && 'active')}>
+      <i.icon className="sb-ico" size={22} strokeWidth={1.75} />
+      <span className="sb-fade">{i.label}</span>
+      {i.badge === 'tickets' && dash?.tickets?.new > 0 && <b className="sb-badge">{dash.tickets.new}</b>}
+    </NavLink>
+  );
+
+  const sidebar = (open, mobile = false) => (
+    <aside className={cx('sb', open && 'sb-open', mobile && 'anim-slide-left')} onClick={mobile ? (e) => e.stopPropagation() : undefined}>
+      {/* Профиль */}
+      <button onClick={() => nav('/settings')} className="sb-profile group text-left" title="Профиль и настройки">
+        <span className="relative shrink-0">
+          <Avatar user={user} size={44} ring={false} />
+          <span className="absolute bottom-0 right-0 size-3 rounded-full bg-emerald-500 ring-2 ring-panel" />
+        </span>
+        <span className="sb-fade flex-1 min-w-0">
+          <span className="block text-[14.5px] font-semibold text-ink truncate">{user.name}</span>
+          <span className="block text-[12.5px] text-ink-3">{ROLES[user.role]}</span>
+        </span>
+        <ChevronRight size={18} className="sb-fade sb-chev group-hover:translate-x-0.5" />
+      </button>
+
+      {/* Поиск */}
+      <div className="sb-search" role="button" tabIndex={0} title="Поиск (Ctrl+K)" onClick={() => setSearchOpen(true)} onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}>
+        <span className="sb-ph sb-fade">Поиск по CRM…</span>
+        <Search size={19} strokeWidth={1.75} />
       </div>
 
-      {/* Основное меню */}
-      {!collapsed && (
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex items-center gap-2 px-3 h-[60px]">
-            <div className="flex-1 flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line bg-panel text-[13px] font-semibold truncate">
-              <span className="truncate">Моя компания</span><ChevronDown size={14} className="text-ink-3 shrink-0" />
-            </div>
-            <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded-lg hover:bg-canvas text-ink-2" title="Поиск (Ctrl+K)"><Search size={17} /></button>
+      {/* Разделы */}
+      <nav className="sb-nav">
+        {items.map((s, k) => (
+          <div key={s.section} className="contents">
+            {k > 0 && <div className="sb-hr" />}
+            {s.items.map(navItem)}
           </div>
-          <button onClick={() => setCollapsed(true)} className="hidden lg:flex absolute left-[250px] top-[66px] z-10 size-6 rounded-md border border-line bg-panel items-center justify-center text-ink-3 hover:text-ink" title="Свернуть меню">
-            <ChevronsLeft size={14} />
-          </button>
-          <nav className="flex-1 overflow-y-auto px-3 pb-4">
-            {NAV.filter((s) => !s.manager || isManager).map((s) => (
-              <div key={s.section} className="mt-3">
-                <div className="px-2 mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-ink">{s.section}</div>
-                {s.items.map((i) => (
-                  <NavLink key={i.to} to={i.to} end={i.end}
-                    className={({ isActive }) => cx('flex items-center gap-2.5 h-10 px-3 rounded-xl text-[13.5px] transition-all duration-200',
-                      isActive ? 'bg-brand/[.07] text-brand font-semibold border border-brand/40' : 'text-ink-2 hover:bg-canvas hover:text-ink border border-transparent')}>
-                    <i.icon size={17} strokeWidth={1.8} />
-                    <span className="flex-1 truncate">{i.label}</span>
-                    {i.badge === 'tickets' && dash?.tickets?.new > 0 && <span className="text-[11px] font-semibold text-white bg-violet rounded-full px-1.5 min-w-5 text-center">{dash.tickets.new}</span>}
-                  </NavLink>
-                ))}
-              </div>
-            ))}
-            <div className="mt-4">
-              <div className="flex items-center gap-1 px-2 mb-1.5 text-[11.5px] font-medium text-ink">
-                <ChevronDown size={13} /> Избранное
-              </div>
-              {starredProjects.length === 0 && <div className="px-2.5 text-[12px] text-ink-3">Отметьте проект звёздочкой</div>}
-              {starredProjects.map((p) => (
-                <button key={p.id} onClick={() => nav(`/projects?open=${p.id}`)} className="w-full flex items-center gap-2 h-8 px-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-canvas text-left">
-                  <span className="size-1.5 rounded-full shrink-0" style={{ background: PROJECT_STATUS[p.status]?.color }} />
-                  <span className="truncate">{p.name}</span>
-                </button>
-              ))}
-            </div>
-          </nav>
-        </div>
-      )}
-      {collapsed && (
-        <button onClick={() => setCollapsed(false)} className="hidden lg:flex absolute left-[54px] top-[66px] z-10 size-6 rounded-md border border-line bg-panel items-center justify-center text-ink-3 rotate-180" title="Развернуть меню">
-          <ChevronsLeft size={14} />
-        </button>
-      )}
+        ))}
+        {starredProjects.length > 0 && (<>
+          <div className="sb-hr" />
+          {starredProjects.slice(0, 6).map((p) => (
+            <button key={p.id} onClick={() => nav(`/projects?open=${p.id}`)} className="sb-item" title={p.name}>
+              <span className="sb-letter" style={{ background: PROJECT_STATUS[p.status]?.color || 'var(--color-brand)' }}>{p.name.replace(/[^\p{L}\p{N}]/gu, '').slice(0, 1).toUpperCase()}</span>
+              <span className="sb-fade truncate pr-2">{p.name}</span>
+            </button>
+          ))}
+        </>)}
+      </nav>
+
+      {/* Действия */}
+      <div className="sb-actions">
+        {open && mobile
+          ? <button className="sb-action" onClick={() => setMobileOpen(false)} title="Закрыть меню"><X size={19} strokeWidth={1.75} /></button>
+          : <button className={cx('sb-action', pinned && 'on')} onClick={() => setPinned((v) => !v)} title={pinned ? 'Открепить меню' : 'Закрепить меню открытым'}>
+              {pinned ? <PinOff size={19} strokeWidth={1.75} /> : <Pin size={19} strokeWidth={1.75} />}
+            </button>}
+        <button className="sb-action" onClick={() => nav('/settings')} title="Настройки"><Settings size={19} strokeWidth={1.75} /></button>
+        <button className="sb-action" onClick={() => nav('/projects?newtask=1')} title="Новая задача"><Plus size={20} strokeWidth={1.75} /></button>
+        <button className="sb-action" onClick={logout} title="Выйти"><LogOut size={19} strokeWidth={1.75} /></button>
+      </div>
     </aside>
   );
 
   return (
     <div className="h-full flex">
-      <div className="hidden lg:block relative shrink-0">{sidebar}</div>
+      <div className="hidden lg:block">{sidebar(pinned)}</div>
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-ink/25 anim-fade" onClick={() => setMobileOpen(false)}>
-          <div className="h-full w-fit relative anim-slide-left" onClick={(e) => e.stopPropagation()}>{sidebar}</div>
+          {sidebar(true, true)}
         </div>
       )}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className={cx('flex-1 min-w-0 flex flex-col transition-[padding] duration-300', pinned ? 'lg:pl-[296px]' : 'lg:pl-[116px]')}>
         <Topbar crumb={crumb} onMenu={() => setMobileOpen(true)} onSearch={() => setSearchOpen(true)} dash={dash} />
         <main className="flex-1 overflow-y-auto">
           <div key={loc.pathname} className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6 page-enter"><Outlet /></div>
