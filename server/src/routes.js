@@ -1231,6 +1231,27 @@ api.put('/contracts/:id', requireRole('admin', 'manager'), wrap((req) => {
 }));
 api.delete('/contracts/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM support_contracts WHERE id = ?', idParam(req)); return { ok: true }; }));
 
+/* ---------- сохранённые фильтры ---------- */
+api.get('/views', wrap((req) => all(`SELECT v.*, u.name user_name FROM saved_views v JOIN users u ON u.id = v.user_id
+  WHERE v.page = ? AND (v.user_id = ? OR v.shared = 1) ORDER BY v.user_id != ?, v.name`, String(req.query.page || ''), req.user.id, req.user.id)
+  .map((v) => ({ ...v, state: JSON.parse(v.state), mine: v.user_id === req.user.id }))));
+api.post('/views', wrap((req) => {
+  const page = String(req.body?.page || '').slice(0, 40);
+  const name = String(req.body?.name || '').trim().slice(0, 60);
+  if (!page || !name) throw bad('Укажите название');
+  const state = JSON.stringify(req.body?.state ?? {});
+  if (state.length > 5000) throw bad('Слишком большой фильтр');
+  const id = insert('saved_views', { user_id: req.user.id, page, name, state, shared: req.body?.shared ? 1 : 0 });
+  return { ...get('SELECT * FROM saved_views WHERE id = ?', id), state: JSON.parse(state), mine: true };
+}));
+api.delete('/views/:id', wrap((req) => {
+  const v = get('SELECT * FROM saved_views WHERE id = ?', idParam(req));
+  if (!v) throw notFound();
+  if (v.user_id !== req.user.id && req.user.role !== 'admin') throw new HttpError(403, 'Удалить можно только свой фильтр');
+  run('DELETE FROM saved_views WHERE id = ?', v.id);
+  return { ok: true };
+}));
+
 /* ---------- отчёты ---------- */
 // Период по МСК: from/to — YYYY-MM-DD включительно (по умолчанию текущий месяц)
 function period(q) {

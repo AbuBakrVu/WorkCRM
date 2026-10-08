@@ -407,6 +407,17 @@ const MIGRATIONS = [
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );`),
+  // 13. Сохранённые фильтры (виды) страниц: личные или общие для команды
+  (d) => d.exec(`CREATE TABLE IF NOT EXISTS saved_views (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      page TEXT NOT NULL,
+      name TEXT NOT NULL,
+      state TEXT NOT NULL,
+      shared INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_views_page ON saved_views(page);`),
 ];
 
 {

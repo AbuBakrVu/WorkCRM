@@ -12,6 +12,7 @@ import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, 
 import { ProjectFormModal } from '../components/ProjectForm';
 import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskStatusPill, TaskWorkActions, isOverdue } from '../components/Tasks';
 import { RecurrenceList } from '../components/Recurrence';
+import { SavedViews } from '../components/SavedViews';
 import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
 
 export default function Projects() {
@@ -180,6 +181,8 @@ export default function Projects() {
               </>)}
             </Popover>
           )}
+          <SavedViews page="projects" state={{ filter, q, emp, kProject }}
+            apply={(v) => { if (v.filter) setFilter(v.filter); setQ(v.q || ''); setEmp(v.emp ?? null); setKProject(v.kProject ?? null); }} />
           {view === 'list' && (
             <div className="ml-auto flex items-center gap-1">
               <button className="chip" onClick={() => setExpanded(list.map((p) => p.id))} title="Развернуть все"><ChevronsUpDown size={15} />Развернуть</button>

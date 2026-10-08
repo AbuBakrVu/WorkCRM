@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Filter, User, Table2, Kanban, X, MapPin, Clock, Play, MessageSquare, AlertTriangle, Ticket as TicketIcon, Send } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored } from '../lib/store';
+import { SavedViews } from '../components/SavedViews';
 import { api } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
 import { fmtDateTime, fmtHM, parseDate, timeAgo } from '../lib/format';
@@ -99,6 +100,8 @@ export default function Tickets() {
           <div className="px-2.5 pt-2 py-1 text-[11.5px] font-medium text-ink-3">Категория</div>
           {Object.entries(TICKET_CATEGORY).map(([k, l]) => <MenuItem key={k} checked={cat.includes(k)} onClick={() => setCat((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k]))}>{l}</MenuItem>)}
         </Popover>
+        <SavedViews page="tickets" state={{ scope, q, assignee, prio, cat }}
+          apply={(v) => { if (v.scope) setScope(v.scope); setQ(v.q || ''); setAssignee(v.assignee ?? null); setPrio(v.prio || []); setCat(v.cat || []); }} />
         <div className="ml-auto flex items-center gap-1 p-0.5 rounded-full border border-line bg-panel">
           {[['table', Table2, 'Таблица'], ['kanban', Kanban, 'Канбан']].map(([v, I, l]) => (
             <button key={v} onClick={() => setView(v)} className={cx('flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-medium', view === v ? 'bg-ink text-white' : 'text-ink-2')}><I size={14} />{l}</button>
