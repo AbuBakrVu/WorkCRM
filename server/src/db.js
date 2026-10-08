@@ -449,6 +449,39 @@ const MIGRATIONS = [
       deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       deleted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );`),
+  // 15. Оборудование клиентов и база знаний
+  (d) => {
+    d.exec(`CREATE TABLE IF NOT EXISTS assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+      type TEXT NOT NULL DEFAULT 'other',
+      name TEXT NOT NULL,
+      model TEXT, serial TEXT, inventory_no TEXT, ip TEXT, mac TEXT,
+      location TEXT, owner TEXT,
+      purchase_date TEXT, warranty_until TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_assets_client ON assets(client_id);
+    CREATE TABLE IF NOT EXISTS kb_articles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      category TEXT,
+      body TEXT,
+      secret TEXT,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+      asset_id INTEGER REFERENCES assets(id) ON DELETE SET NULL,
+      pinned INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`);
+    addColumn(d, 'tickets', 'asset_id', 'INTEGER REFERENCES assets(id) ON DELETE SET NULL');
+  },
 ];
 
 {

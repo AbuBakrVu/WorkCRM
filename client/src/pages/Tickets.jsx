@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Plus, Search, Filter, User, Table2, Kanban, X, MapPin, Clock, Play, MessageSquare, AlertTriangle, Ticket as TicketIcon, Send } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored } from '../lib/store';
 import { SavedViews } from '../components/SavedViews';
@@ -35,7 +35,7 @@ export default function Tickets() {
 
   useEffect(() => {
     const o = params.get('open'); if (o) setOpenId(Number(o));
-    if (params.get('new')) setFormOpen(true);
+    if (params.get('new')) setFormOpen({ asset_id: params.get('asset') || null, client_id: params.get('client') || null });
     if (o || params.get('new')) setParams({}, { replace: true });
   }, [params, setParams]);
 
@@ -211,14 +211,29 @@ function TicketKanban({ tickets, now, onOpen, onPatch, scope }) {
 export function TicketFormModal({ open, onClose, onSaved }) {
   const { users, clients, projects, toast } = useApp();
   const [f, setF] = useState({});
-  useEffect(() => { if (open) setF({ title: '', priority: 'normal', category: 'other' }); }, [open]);
+  const [assets, setAssets] = useState([]);
+  useEffect(() => {
+    if (!open) return;
+    const preset = typeof open === 'object' ? open : {};
+    setF({ title: '', priority: 'normal', category: 'other', ...preset });
+    api.get('/assets').then((list) => {
+      setAssets(list);
+      const a = preset.asset_id && list.find((x) => String(x.id) === String(preset.asset_id));
+      if (a) setF((x) => ({ ...x, client_id: x.client_id || a.client_id, location: x.location || a.location || '', requester: x.requester || a.owner || '' }));
+    }).catch(() => {});
+  }, [open]);
+  // Выбрали устройство — подставляем клиента и место
+  const pickAsset = (v) => {
+    const a = assets.find((x) => String(x.id) === String(v));
+    setF((x) => ({ ...x, asset_id: v, client_id: x.client_id || a?.client_id || null, location: x.location || a?.location || '', requester: x.requester || a?.owner || '' }));
+  };
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
   const submit = async (e) => {
     e?.preventDefault();
     if (!f.title?.trim()) return toast('Укажите тему заявки', 'error');
     try {
       const t = await api.post('/tickets', { ...f, client_id: f.client_id ? +f.client_id : null, project_id: f.project_id ? +f.project_id : null,
-        assignee_id: f.assignee_id ? +f.assignee_id : null, status: f.assignee_id ? 'in_progress' : 'new' });
+        assignee_id: f.assignee_id ? +f.assignee_id : null, asset_id: f.asset_id ? +f.asset_id : null, status: f.assignee_id ? 'in_progress' : 'new' });
       toast(`Заявка #${t.id} создана`); onSaved?.(t); onClose();
     } catch (err) { toast(err.message, 'error'); }
   };
@@ -237,6 +252,8 @@ export function TicketFormModal({ open, onClose, onSaved }) {
         <Field label="Исполнитель"><Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" search options={userOptions(users)} /></Field>
         <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
         <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" search options={nameOptions(projects)} /></Field>
+        <Field label="Устройство"><Select value={f.asset_id} onChange={pickAsset} placeholder="—" search
+          options={assets.filter((a) => !f.client_id || a.client_id === +f.client_id).map((a) => ({ value: a.id, label: a.name, hint: [a.location, a.ip].filter(Boolean).join(' · ') || a.client_name }))} /></Field>
         <Field label="Описание" className="col-span-2"><textarea className="input" rows={3} value={f.description || ''} onChange={(e) => set('description')(e.target.value)} /></Field>
       </form>
     </Modal>
@@ -281,6 +298,7 @@ function TicketDrawer({ id, onClose }) {
             <Field label="Заявитель"><input className="input" defaultValue={t.requester || ''} onBlur={(e) => e.target.value !== (t.requester || '') && patch({ requester: e.target.value })} /></Field>
             <Field label="Клиент"><Select value={t.client_id} onChange={(v) => patch({ client_id: v ? +v : null })} placeholder="—" search options={nameOptions(clients)} /></Field>
             <Field label="Проект"><Select value={t.project_id} onChange={(v) => patch({ project_id: v ? +v : null })} placeholder="—" search options={nameOptions(projects)} /></Field>
+            {t.asset_id && <div className="col-span-2 text-[13px]"><span className="text-ink-3">Устройство: </span><Link to={`/assets?open=${t.asset_id}`} className="text-violet hover:underline">{t.asset_name}</Link></div>}
           </div>
           {t.requester_contact && <div className="text-[13px] text-ink-2">Контакт: {t.requester_contact}</div>}
           <Field label="Описание"><textarea className="input" rows={3} defaultValue={t.description || ''} onBlur={(e) => e.target.value !== (t.description || '') && patch({ description: e.target.value })} /></Field>

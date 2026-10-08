@@ -17,6 +17,8 @@ import Calendar from './pages/Calendar';
 import Catalog from './pages/Catalog';
 import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
+import Assets from './pages/Assets';
+import Kb from './pages/Kb';
 import ClientReport from './pages/ClientReport';
 
 function Gate() {
@@ -31,6 +33,8 @@ function Gate() {
         <Route path="projects" element={<Projects />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="calendar" element={<Calendar />} />
+        <Route path="assets" element={<Assets />} />
+        <Route path="kb" element={<Kb />} />
         <Route path="time" element={<TimeTracker />} />
         <Route path="team" element={<Team />} />
         <Route path="clients" element={<Clients />} />

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Ticket, Timer, Users, Building2, Handshake, Wallet, Settings, LogOut, Search,
-  Moon, Sun, CalendarDays, Package, Receipt, BarChart3, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
+  Moon, Sun, CalendarDays, Package, Receipt, BarChart3, Monitor, BookOpen, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
@@ -19,6 +19,8 @@ const NAV = [
     { to: '/tickets', label: 'Заявки', icon: Ticket, badge: 'tickets' },
     { to: '/calendar', label: 'Календарь', icon: CalendarDays },
     { to: '/time', label: 'Учёт времени', icon: Timer },
+    { to: '/assets', label: 'Оборудование', icon: Monitor },
+    { to: '/kb', label: 'База знаний', icon: BookOpen },
     { to: '/team', label: 'Команда', icon: Users },
   ] },
   { section: 'Продажи', items: [
@@ -34,7 +36,7 @@ const NAV = [
 ];
 
 const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets': 'Заявки', '/time': 'Учёт времени', '/team': 'Команда',
-  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки', '/calendar': 'Календарь', '/catalog': 'Каталог', '/invoices': 'Счета', '/reports': 'Отчёты' };
+  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки', '/calendar': 'Календарь', '/catalog': 'Каталог', '/invoices': 'Счета', '/reports': 'Отчёты', '/assets': 'Оборудование', '/kb': 'База знаний' };
 
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();
@@ -232,6 +234,8 @@ const KIND = {
   client: { icon: Building2, label: 'Клиент', url: (r) => `/clients?open=${r.id}`, sub: (r) => r.sub },
   deal: { icon: Handshake, label: 'Сделка', url: () => '/pipeline', sub: (r) => DEAL_STAGE[r.sub]?.label },
   task: { icon: ListTodo, label: 'Задача', url: (r) => `/projects?open=${r.project_id}&task=${r.id}`, sub: (r) => r.sub },
+  asset: { icon: Monitor, label: 'Оборудование', url: (r) => `/assets?open=${r.id}`, sub: (r) => r.sub },
+  kb: { icon: BookOpen, label: 'База знаний', url: (r) => `/kb?open=${r.id}`, sub: (r) => r.sub },
 };
 
 function SearchModal({ open, onClose }) {

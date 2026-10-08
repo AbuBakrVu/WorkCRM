@@ -11,9 +11,9 @@ export const currentUserId = () => requestUser.getStore()?.userId ?? null;
 // Какие таблицы и поля ведут историю (вычисляемые поля не пишем)
 const TRACKED = {
   tasks: 'task', projects: 'project', clients: 'client', deals: 'deal', tickets: 'ticket', invoices: 'invoice',
-  support_contracts: 'contract', companies: 'company', catalog_items: 'catalog', users: 'user',
+  support_contracts: 'contract', companies: 'company', catalog_items: 'catalog', users: 'user', assets: 'asset', kb_articles: 'kb',
 };
-const SKIP = new Set(['position', 'completed_at', 'paid_at', 'closed_at', 'net', 'vat', 'total', 'paid', 'amount', 'password_hash', 'created_at', 'updated_at']);
+const SKIP = new Set(['position', 'completed_at', 'paid_at', 'closed_at', 'net', 'vat', 'total', 'paid', 'amount', 'password_hash', 'created_at', 'updated_at', 'secret', 'updated_by']);
 const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v));
 
 // Вызывается перед UPDATE: сравнивает и пишет изменения

@@ -13,7 +13,7 @@ const FIELDS = {
   contract_no: 'Номер договора', contract_date: 'Дата договора', number: 'Номер', date: 'Дата', cancelled: 'Отменён',
   phone: 'Телефон', email: 'Email', inn: 'ИНН', kpp: 'КПП', ogrn: 'ОГРН', address: 'Адрес', contact_name: 'Контакт', full_name: 'Полное наименование',
   bank_name: 'Банк', bik: 'БИК', account: 'Р/с', corr_account: 'К/с', director_name: 'Руководитель', director_title: 'Должность руководителя', type: 'Тип',
-  hours_limit: 'Лимит часов', monthly_fee: 'Абонплата', overage_rate: 'Ставка перерасхода', active: 'Активен', budget: 'Бюджет', price: 'Цена', unit: 'Ед.',
+  hours_limit: 'Лимит часов', model: 'Модель', serial: 'Серийный номер', inventory_no: 'Инв. номер', ip: 'IP', mac: 'MAC', owner: 'Пользователь', warranty_until: 'Гарантия до', purchase_date: 'Дата покупки', body: 'Текст', pinned: 'Закреплено', asset_id: 'Устройство', monthly_fee: 'Абонплата', overage_rate: 'Ставка перерасхода', active: 'Активен', budget: 'Бюджет', price: 'Цена', unit: 'Ед.',
   vat_rate: 'Ставка НДС', role: 'Роль', position: 'Должность', hourly_rate: 'Ставка в час', due_at: 'Срок реакции', manual_progress: 'Прогресс', visible: 'Видимость',
 };
 const VALUES = {
@@ -48,7 +48,8 @@ export function HistoryPanel({ entity, id, defaultOpen = false }) {
               <Avatar user={h.user_name ? { name: h.user_name, color: h.user_color } : null} size={22} ring={false} />
               <div className="min-w-0 flex-1">
                 <div className="text-ink-3"><span className="text-ink font-medium">{h.user_name || 'Система'}</span> · {fmtDateTime(h.created_at)}</div>
-                {h.field === '_deleted' ? <div className="text-red-600">Удалено в корзину</div> : h.field === '_restored' ? <div className="text-emerald-600">Восстановлено из корзины</div> : (
+                {h.field === '_deleted' ? <div className="text-red-600">Удалено в корзину</div> : h.field === '_restored' ? <div className="text-emerald-600">Восстановлено из корзины</div>
+                  : h.field === '_secret_viewed' ? <div className="text-amber-600">Просмотрел доступы</div> : h.field === '_secret_changed' ? <div className="text-amber-600">Изменил доступы</div> : (
                   <div className="text-ink-2 break-words"><span className="text-ink">{FIELDS[h.field] || h.field}:</span> <span className="line-through text-ink-3">{val(h.field, h.old_value)}</span> → <span className="text-ink">{val(h.field, h.new_value)}</span></div>
                 )}
               </div>
