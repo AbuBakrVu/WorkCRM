@@ -30,18 +30,18 @@ html, body, #root { height: 100%; }
 /* ---------- Тёмная тема: переопределяем токены ---------- */
 html.dark {
   color-scheme: dark;
-  --color-canvas: #0d1210;
-  --color-panel: #151b18;
-  --color-side: #121815;
-  --color-line: #242c28;
-  --color-line-strong: #323c37;
-  --color-ink: #e6ebe8;
-  --color-ink-2: #a9b3ad;
-  --color-ink-3: #6f7a74;
-  --color-brand: #2e8b59;
-  --color-brand-strong: #38a068;
-  --color-violet: #6cc390;
-  --color-st-planned: #56605a;
+  --color-canvas: #0f1013;
+  --color-panel: #17191d;
+  --color-side: #141619;
+  --color-line: #25282e;
+  --color-line-strong: #30343b;
+  --color-ink: #e8eaed;
+  --color-ink-2: #a4a9b2;
+  --color-ink-3: #6b717b;
+  --color-brand: #2f9a63;
+  --color-brand-strong: #38ad71;
+  --color-violet: #5fc28b;
+  --color-st-planned: #545962;
   /* Цветные плашки Tailwind — приглушённые полупрозрачные */
   --color-red-50: rgb(239 68 68 / .13);
   --color-red-200: rgb(239 68 68 / .35);
@@ -59,8 +59,8 @@ html.dark {
 html.dark .bg-ink.text-white { color: var(--color-canvas); }
 html.dark .bg-ink\/25, html.dark .bg-ink\/20 { background-color: rgb(0 0 0 / .55); }
 html.dark .pill { background: color-mix(in srgb, var(--pc) 20%, transparent) !important; color: color-mix(in srgb, var(--pc) 50%, white) !important; }
-html.dark * { scrollbar-color: #2e3833 transparent; }
-html.dark *::-webkit-scrollbar-thumb { background: #2e3833; }
+html.dark * { scrollbar-color: #33373e transparent; }
+html.dark *::-webkit-scrollbar-thumb { background: #33373e; }
 html.dark .shadow-2xl, html.dark .shadow-xl { --tw-shadow-color: rgb(0 0 0 / .6); }
 html.theme-anim, html.theme-anim * { transition: background-color .3s, border-color .3s, color .2s !important; }
 .pill { color: var(--pc); background: var(--pb); }
