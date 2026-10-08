@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Plus, Calendar } from 'lucide-react';
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { DEAL_STAGE } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate, parseDate, plural } from '../lib/format';
-import { Button, Modal, Field, Select, Avatar, ConfirmButton, PageHeader, Stat, Spinner, cx, userOptions, nameOptions } from '../components/ui';
+import { Button, Avatar, PageHeader, Stat, Spinner, cx } from '../components/ui';
+import { DealModal } from '../components/DealModal';
 import { Handshake, TrendingUp, Trophy } from 'lucide-react';
 
 export default function Pipeline() {
@@ -55,6 +56,7 @@ export default function Pipeline() {
                       className={cx('bg-panel rounded-xl border border-line p-3 cursor-pointer hover:shadow-md transition-shadow', dragId === d.id && 'opacity-50')}>
                       <div className="text-[13.5px] font-medium leading-snug">{d.title}</div>
                       <div className="text-[12px] text-ink-3 truncate mt-0.5">{d.client_name || 'Без клиента'}</div>
+                      {d.items_count > 0 && <div className="text-[11.5px] text-ink-3 mt-1">{d.items_count} {plural(d.items_count, 'позиция', 'позиции', 'позиций')}{d.company_name ? ` · ${d.company_name}` : ''}</div>}
                       <div className="flex items-center justify-between mt-2.5">
                         <span className="text-[13.5px] font-semibold tabular">{fmtMoney(d.amount)}</span>
                         <div className="flex items-center gap-2">
@@ -70,36 +72,7 @@ export default function Pipeline() {
           );
         })}
       </div>
-      <DealModal deal={form} onClose={() => setForm(null)} />
+      {form && <DealModal deal={form} onClose={() => setForm(null)} />}
     </div>
-  );
-}
-
-function DealModal({ deal, onClose }) {
-  const { users, clients, toast, bump, isManager } = useApp();
-  const [f, setF] = useState({});
-  useEffect(() => { if (deal) setF({ stage: 'lead', ...deal }); }, [deal]);
-  const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
-  const submit = async (e) => {
-    e?.preventDefault();
-    if (!f.title?.trim()) return toast('Укажите название', 'error');
-    const body = { title: f.title, client_id: f.client_id ? +f.client_id : null, amount: +f.amount || 0, stage: f.stage, owner_id: f.owner_id ? +f.owner_id : null, expected_close: f.expected_close, notes: f.notes };
-    try { f.id ? await api.put(`/deals/${f.id}`, body) : await api.post('/deals', body); toast('Сохранено'); bump(); onClose(); }
-    catch (err) { toast(err.message, 'error'); }
-  };
-  const remove = async () => { await api.del(`/deals/${f.id}`); toast('Сделка удалена'); bump(); onClose(); };
-  return (
-    <Modal open={!!deal} onClose={onClose} title={f.id ? 'Сделка' : 'Новая сделка'} width={540}
-      footer={<>{f.id && isManager && <div className="mr-auto"><ConfirmButton onConfirm={remove} /></div>}<Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit}>Сохранить</Button></>}>
-      <form onSubmit={submit} className="grid grid-cols-2 gap-3.5">
-        <Field label="Название" className="col-span-2"><input className="input" value={f.title || ''} onChange={set('title')} autoFocus /></Field>
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
-        <Field label="Сумма, ₽"><input type="number" min="0" className="input" value={f.amount || ''} onChange={set('amount')} /></Field>
-        <Field label="Этап"><Select value={f.stage} onChange={set('stage')} options={Object.entries(DEAL_STAGE).map(([value, s]) => ({ value, label: s.label }))} /></Field>
-        <Field label="Ожидаемое закрытие"><input type="date" className="input" value={f.expected_close || ''} onChange={set('expected_close')} /></Field>
-        <Field label="Ответственный" className="col-span-2"><Select value={f.owner_id} onChange={set('owner_id')} placeholder="—" search options={userOptions(users)} /></Field>
-        <Field label="Заметки" className="col-span-2"><textarea className="input" rows={3} value={f.notes || ''} onChange={set('notes')} /></Field>
-      </form>
-    </Modal>
   );
 }

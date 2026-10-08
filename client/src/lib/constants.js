@@ -62,3 +62,11 @@ export const INCOME_CATEGORIES = ['Проекты', 'Обслуживание', 
 export const EXPENSE_CATEGORIES = ['ФОТ', 'Аренда', 'Оборудование', 'Связь', 'Транспорт', 'Налоги', 'Подрядчики', 'Прочее'];
 
 export const USER_COLORS = ['#4f46e5', '#0ea5e9', '#ec4899', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#14b8a6', '#64748b'];
+
+// НДС: ставка на позицию сделки и режим расчёта
+export const VAT_RATES = [
+  { value: 'none', label: 'Без НДС' }, { value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '7', label: '7%' },
+  { value: '10', label: '10%' }, { value: '20', label: '20%' }, { value: '22', label: '22%' },
+];
+export const VAT_MODE = { above: 'НДС сверху', included: 'В т.ч. НДС' };
+export const UNITS = ['шт', 'усл', 'ч', 'мес', 'компл', 'м', 'упак', 'лиц'];

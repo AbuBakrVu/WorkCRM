@@ -5,6 +5,7 @@ import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { CLIENT_TYPE, PROJECT_STATUS, DEAL_STAGE, TICKET_STATUS } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate } from '../lib/format';
+import { RequisitesFields } from '../components/Requisites';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, cx } from '../components/ui';
 
 export default function Clients() {
@@ -82,7 +83,8 @@ function ClientFormModal({ client, onClose, onSaved }) {
   const submit = async (e) => {
     e?.preventDefault();
     if (!f.name?.trim()) return toast('Укажите название', 'error');
-    const body = { name: f.name, type: f.type, contact_name: f.contact_name, phone: f.phone, email: f.email, inn: f.inn, address: f.address, notes: f.notes };
+    const body = Object.fromEntries(['name', 'type', 'contact_name', 'phone', 'email', 'inn', 'address', 'notes', 'full_name', 'kpp', 'ogrn',
+      'bank_name', 'bik', 'account', 'corr_account', 'director_name', 'director_title'].map((k) => [k, f[k] ?? null]));
     try {
       const c = f.id ? await api.put(`/clients/${f.id}`, body) : await api.post('/clients', body);
       toast('Сохранено'); bump(); onSaved?.(c); onClose();
@@ -94,11 +96,12 @@ function ClientFormModal({ client, onClose, onSaved }) {
       <form onSubmit={submit} className="grid grid-cols-2 gap-3.5">
         <Field label="Название" className="col-span-2"><input className="input" value={f.name || ''} onChange={set('name')} autoFocus /></Field>
         <Field label="Тип"><Select value={f.type} onChange={set('type')} options={Object.entries(CLIENT_TYPE).map(([value, label]) => ({ value, label }))} /></Field>
-        <Field label="ИНН"><input className="input" value={f.inn || ''} onChange={set('inn')} /></Field>
+        <Field label="ИНН"><input className="input" value={f.inn || ''} onChange={set('inn')} inputMode="numeric" maxLength={12} /></Field>
         <Field label="Контактное лицо"><input className="input" value={f.contact_name || ''} onChange={set('contact_name')} /></Field>
         <Field label="Телефон"><input className="input" value={f.phone || ''} onChange={set('phone')} /></Field>
         <Field label="Email"><input className="input" type="email" value={f.email || ''} onChange={set('email')} /></Field>
         <Field label="Адрес"><input className="input" value={f.address || ''} onChange={set('address')} /></Field>
+        {f.type !== 'person' && <RequisitesFields f={f} set={set} open={!!(f.kpp || f.account || f.full_name)} title="Реквизиты для документов" />}
         <Field label="Заметки" className="col-span-2"><textarea className="input" rows={3} value={f.notes || ''} onChange={set('notes')} /></Field>
       </form>
     </Modal>
@@ -124,6 +127,14 @@ function ClientDrawer({ id, onClose, onEdit }) {
             {c.inn && <span>ИНН {c.inn}</span>}
           </div>
           {c.address && <div className="text-[13px] text-ink-2">{c.address}</div>}
+          {(c.kpp || c.account || c.full_name) && (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] bg-canvas rounded-xl p-3">
+              {[['Полное наименование', c.full_name], ['КПП', c.kpp], ['ОГРН', c.ogrn], ['Руководитель', [c.director_title, c.director_name].filter(Boolean).join(' ')],
+                ['Банк', c.bank_name], ['БИК', c.bik], ['Р/с', c.account], ['К/с', c.corr_account]].filter(([, v]) => v).map(([k, v]) => (
+                <div key={k} className="min-w-0"><span className="text-ink-3">{k}: </span><span className="text-ink-2 break-words">{v}</span></div>
+              ))}
+            </div>
+          )}
           {c.notes && <p className="text-[13px] text-ink-2 bg-canvas rounded-xl p-3 whitespace-pre-wrap">{c.notes}</p>}
           <Section title="Проекты" items={c.projects} render={(p) => <><span className="flex-1 truncate">{p.name}</span><StatusDot color={PROJECT_STATUS[p.status].color} label={PROJECT_STATUS[p.status].label} /></>} />
           <Section title="Сделки" items={c.deals} render={(d) => <><span className="flex-1 truncate">{d.title}</span><span className="tabular text-ink-2 mr-3">{fmtMoney(d.amount)}</span><StatusDot color={DEAL_STAGE[d.stage].color} label={DEAL_STAGE[d.stage].label} /></>} />

@@ -224,6 +224,41 @@ const MIGRATIONS = [
     addColumn(d, 'task_comments', 'report', 'TEXT');
     addColumn(d, 'task_comments', 'report_sec', 'INTEGER');
   },
+  // 7. Документы по сделкам: мои компании (реквизиты), реквизиты клиента, позиции сделки
+  (d) => {
+    d.exec(`CREATE TABLE IF NOT EXISTS companies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      full_name TEXT,
+      inn TEXT, kpp TEXT, ogrn TEXT,
+      address TEXT, phone TEXT, email TEXT, site TEXT,
+      bank_name TEXT, bik TEXT, account TEXT, corr_account TEXT,
+      director_name TEXT, director_title TEXT, accountant_name TEXT,
+      vat_rate TEXT,
+      logo_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+      sign_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+      stamp_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS deal_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      name TEXT NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'шт',
+      qty REAL NOT NULL DEFAULT 1,
+      price REAL NOT NULL DEFAULT 0,
+      vat_rate TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_deal_items_deal ON deal_items(deal_id, position);`);
+    for (const c of ['full_name', 'kpp', 'ogrn', 'bank_name', 'bik', 'account', 'corr_account', 'director_name', 'director_title'])
+      addColumn(d, 'clients', c, 'TEXT');
+    addColumn(d, 'deals', 'company_id', 'INTEGER REFERENCES companies(id) ON DELETE SET NULL');
+    addColumn(d, 'deals', 'vat_mode', "TEXT NOT NULL DEFAULT 'above'"); // above — НДС сверху цены, included — в т.ч. НДС
+    addColumn(d, 'deals', 'contract_no', 'TEXT');
+    addColumn(d, 'deals', 'contract_date', 'TEXT');
+  },
 ];
 
 {

@@ -135,7 +135,8 @@ api.put('/users/:id', requireRole('admin'), wrap((req) => {
 }));
 
 /* ---------- clients ---------- */
-const CLIENT_FIELDS = ['name', 'type', 'contact_name', 'phone', 'email', 'inn', 'address', 'notes'];
+const CLIENT_FIELDS = ['name', 'type', 'contact_name', 'phone', 'email', 'inn', 'address', 'notes',
+  'full_name', 'kpp', 'ogrn', 'bank_name', 'bik', 'account', 'corr_account', 'director_name', 'director_title'];
 
 api.get('/clients', wrap(() => all(`
   SELECT c.*,
@@ -569,28 +570,140 @@ api.post('/tickets/:id/comments', wrap((req) => {
 }));
 api.delete('/tickets/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM tickets WHERE id = ?', idParam(req)); return { ok: true }; }));
 
+/* ---------- мои компании (от чьего имени выставляем документы) ---------- */
+const COMPANY_FIELDS = ['name', 'full_name', 'inn', 'kpp', 'ogrn', 'address', 'phone', 'email', 'site', 'bank_name', 'bik', 'account',
+  'corr_account', 'director_name', 'director_title', 'accountant_name', 'vat_rate', 'is_default'];
+const COMPANY_IMAGES = { logo: 'logo_file_id', sign: 'sign_file_id', stamp: 'stamp_file_id' };
+const VAT_RATES = ['none', '0', '5', '7', '10', '20', '22'];
+const checkVat = (v) => { if (v != null && !VAT_RATES.includes(String(v))) throw bad('Неверная ставка НДС'); return v == null ? null : String(v); };
+function saveCompany(id, body) {
+  const data = pick(body, COMPANY_FIELDS);
+  if ('vat_rate' in data) data.vat_rate = checkVat(data.vat_rate);
+  return tx(() => {
+    if (data.is_default) run('UPDATE companies SET is_default = 0');
+    if (id) { update('companies', id, data); return id; }
+    required(data, 'name');
+    if (!get('SELECT 1 FROM companies LIMIT 1')) data.is_default = 1; // первая — по умолчанию
+    return insert('companies', data);
+  });
+}
+api.get('/companies', wrap(() => all('SELECT * FROM companies ORDER BY is_default DESC, name')));
+api.post('/companies', requireRole('admin', 'manager'), wrap((req) => get('SELECT * FROM companies WHERE id = ?', saveCompany(null, req.body))));
+api.put('/companies/:id', requireRole('admin', 'manager'), wrap((req) => {
+  const id = idParam(req);
+  if (!get('SELECT 1 FROM companies WHERE id = ?', id)) throw notFound();
+  return get('SELECT * FROM companies WHERE id = ?', saveCompany(id, req.body));
+}));
+api.delete('/companies/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM companies WHERE id = ?', idParam(req)); return { ok: true }; }));
+// Логотип, подпись, печать — картинки (PNG с прозрачным фоном лучше всего)
+api.post('/companies/:id/image/:kind', requireRole('admin', 'manager'), express.raw({ type: 'application/octet-stream', limit: 5 * 1024 * 1024 }), wrap((req) => {
+  const id = idParam(req);
+  const col = COMPANY_IMAGES[req.params.kind];
+  if (!col) throw bad('Неверный тип картинки');
+  const c = get('SELECT * FROM companies WHERE id = ?', id);
+  if (!c) throw notFound();
+  const mime = String(req.get('X-File-Type') || '');
+  if (!/^image\/(png|jpe?g)$/.test(mime)) throw bad('Нужна картинка PNG или JPG');
+  if (!Buffer.isBuffer(req.body) || !req.body.length) throw bad('Пустой файл');
+  const ext = mime === 'image/png' ? '.png' : '.jpg';
+  const stored = `${crypto.randomUUID()}${ext}`;
+  fs.writeFileSync(path.join(UPLOAD_DIR, stored), req.body);
+  const fid = insert('files', { user_id: req.user.id, name: `${req.params.kind}${ext}`, size: req.body.length, mime, stored });
+  const old = c[col] && get('SELECT stored FROM files WHERE id = ?', c[col]);
+  update('companies', id, { [col]: fid });
+  if (old) { run('DELETE FROM files WHERE id = ?', c[col]); removeStored(old.stored); }
+  return get('SELECT * FROM companies WHERE id = ?', id);
+}));
+api.delete('/companies/:id/image/:kind', requireRole('admin', 'manager'), wrap((req) => {
+  const id = idParam(req);
+  const col = COMPANY_IMAGES[req.params.kind];
+  if (!col) throw bad('Неверный тип картинки');
+  const c = get('SELECT * FROM companies WHERE id = ?', id);
+  if (!c) throw notFound();
+  const old = c[col] && get('SELECT stored FROM files WHERE id = ?', c[col]);
+  update('companies', id, { [col]: null });
+  if (old) { run('DELETE FROM files WHERE id = ?', c[col]); removeStored(old.stored); }
+  return get('SELECT * FROM companies WHERE id = ?', id);
+}));
+
 /* ---------- deals (воронка) ---------- */
-const DEAL_FIELDS = ['title', 'client_id', 'amount', 'stage', 'owner_id', 'expected_close', 'notes', 'position'];
-const DEAL_SELECT = `SELECT d.*, c.name client_name, u.name owner_name, u.color owner_color
-  FROM deals d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN users u ON u.id = d.owner_id`;
+const DEAL_FIELDS = ['title', 'client_id', 'amount', 'stage', 'owner_id', 'expected_close', 'notes', 'position',
+  'company_id', 'vat_mode', 'contract_no', 'contract_date'];
+const DEAL_SELECT = `SELECT d.*, c.name client_name, u.name owner_name, u.color owner_color, co.name company_name,
+    (SELECT COUNT(*) FROM deal_items i WHERE i.deal_id = d.id) items_count
+  FROM deals d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN users u ON u.id = d.owner_id LEFT JOIN companies co ON co.id = d.company_id`;
+
+// Суммы по позициям: НДС сверху (above) или в т.ч. (included). Округляем до копеек построчно.
+const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+export function calcItems(items, mode = 'above') {
+  let net = 0, vat = 0, total = 0;
+  const rows = items.map((it) => {
+    const rate = it.vat_rate && it.vat_rate !== 'none' ? Number(it.vat_rate) : 0;
+    const base = r2(it.qty * it.price);
+    let lineVat, lineTotal, lineNet;
+    if (mode === 'included') { lineTotal = base; lineVat = r2((base * rate) / (100 + rate)); lineNet = r2(base - lineVat); }
+    else { lineNet = base; lineVat = r2((base * rate) / 100); lineTotal = r2(base + lineVat); }
+    net += lineNet; vat += lineVat; total += lineTotal;
+    return { ...it, net: lineNet, vat: lineVat, total: lineTotal };
+  });
+  return { rows, net: r2(net), vat: r2(vat), total: r2(total) };
+}
+const dealItems = (id) => all('SELECT * FROM deal_items WHERE deal_id = ? ORDER BY position, id', id);
+function getDeal(id) {
+  const d = get(`${DEAL_SELECT} WHERE d.id = ?`, id);
+  if (!d) return null;
+  const calc = calcItems(dealItems(id), d.vat_mode);
+  return { ...d, items: calc.rows, totals: { net: calc.net, vat: calc.vat, total: calc.total } };
+}
+// Позиции сохраняются целиком списком; сумма сделки = итог по позициям
+function saveItems(dealId, items, mode) {
+  if (!Array.isArray(items)) return;
+  const clean = items.map((it, i) => {
+    const name = String(it?.name || '').trim().slice(0, 500);
+    if (!name) throw bad(`Позиция ${i + 1}: укажите наименование`);
+    const qty = Number(it.qty), price = Number(it.price);
+    if (!Number.isFinite(qty) || qty <= 0) throw bad(`Позиция ${i + 1}: неверное количество`);
+    if (!Number.isFinite(price) || price < 0) throw bad(`Позиция ${i + 1}: неверная цена`);
+    return { name, unit: String(it.unit || 'шт').trim().slice(0, 20) || 'шт', qty, price, vat_rate: checkVat(it.vat_rate ?? null) };
+  });
+  run('DELETE FROM deal_items WHERE deal_id = ?', dealId);
+  clean.forEach((it, i) => insert('deal_items', { deal_id: dealId, position: i, ...it }));
+  if (clean.length) update('deals', dealId, { amount: calcItems(clean, mode).total });
+}
+const checkDeal = (data) => { if (data.vat_mode && !['above', 'included'].includes(data.vat_mode)) throw bad('Неверный режим НДС'); };
 
 api.get('/deals', wrap(() => all(`${DEAL_SELECT} ORDER BY d.position, d.created_at DESC`)));
+api.get('/deals/:id', wrap((req) => getDeal(idParam(req)) || (() => { throw notFound(); })()));
 api.post('/deals', wrap((req) => {
   const data = pick(req.body, DEAL_FIELDS);
   required(data, 'title');
+  checkDeal(data);
   data.owner_id ??= req.user.id;
-  const id = insert('deals', data);
+  data.company_id ??= get('SELECT id FROM companies ORDER BY is_default DESC, id LIMIT 1')?.id ?? null;
+  const id = tx(() => {
+    const nid = insert('deals', data);
+    saveItems(nid, req.body.items, data.vat_mode || 'above');
+    return nid;
+  });
   logActivity(req.user.id, 'deal', id, 'create', `создал сделку «${data.title}»`);
-  return get(`${DEAL_SELECT} WHERE d.id = ?`, id);
+  return getDeal(id);
 }));
 api.put('/deals/:id', wrap((req) => {
   const id = idParam(req);
   const before = get('SELECT * FROM deals WHERE id = ?', id);
   if (!before) throw notFound();
   const data = pick(req.body, DEAL_FIELDS);
-  update('deals', id, data);
+  checkDeal(data);
+  tx(() => {
+    update('deals', id, data);
+    saveItems(id, req.body.items, data.vat_mode || before.vat_mode);
+    if (!Array.isArray(req.body.items) && data.vat_mode && data.vat_mode !== before.vat_mode) {
+      const items = dealItems(id);
+      if (items.length) update('deals', id, { amount: calcItems(items, data.vat_mode).total });
+    }
+  });
   if (data.stage && data.stage !== before.stage) logActivity(req.user.id, 'deal', id, 'stage', `перевёл сделку «${before.title}» на этап ${data.stage}`);
-  return get(`${DEAL_SELECT} WHERE d.id = ?`, id);
+  return getDeal(id);
 }));
 api.delete('/deals/:id', requireRole('admin', 'manager'), wrap((req) => { run('DELETE FROM deals WHERE id = ?', idParam(req)); return { ok: true }; }));
 

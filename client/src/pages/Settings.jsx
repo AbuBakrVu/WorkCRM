@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { ROLES, USER_COLORS } from '../lib/constants';
-import { Button, Card, Field, PageHeader, Avatar, cx } from '../components/ui';
+import { Button, Card, Field, PageHeader, Avatar, Tabs, cx } from '../components/ui';
+import { useStored } from '../lib/store';
+import { CompaniesSettings } from '../components/Companies';
 
 export default function Settings() {
-  const { user, setUser, toast, bump } = useApp();
+  const { user, setUser, toast, bump, isManager } = useApp();
+  const [tab, setTab] = useStored('crm.settings.tab', 'profile');
   const [f, setF] = useState({ name: user.name, position: user.position || '', phone: user.phone || '', color: user.color });
   const [pw, setPw] = useState({ current_password: '', new_password: '' });
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
@@ -20,8 +23,12 @@ export default function Settings() {
   };
 
   return (
-    <div className="max-w-[720px]">
-      <PageHeader title="Настройки" subtitle="Профиль и безопасность" />
+    <div className="max-w-[820px]">
+      <PageHeader title="Настройки" subtitle="Профиль, безопасность и реквизиты компаний" />
+      {isManager && (
+        <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Профиль' }, { value: 'companies', label: 'Мои компании' }]} /></div>
+      )}
+      {isManager && tab === 'companies' ? <CompaniesSettings /> : (<>
       <Card className="p-6">
         <div className="flex items-center gap-4 mb-5">
           <Avatar user={{ ...user, ...f }} size={56} ring={false} />
@@ -45,6 +52,7 @@ export default function Settings() {
           <div className="sm:col-span-2"><Button variant="dark" disabled={!pw.new_password}>Изменить пароль</Button></div>
         </form>
       </Card>
+      </>)}
     </div>
   );
 }

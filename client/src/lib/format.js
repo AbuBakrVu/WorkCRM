@@ -81,3 +81,7 @@ export function plural(n, one, few, many) {
   if (b === 1) return one;
   return many;
 }
+
+// Деньги с копейками: 12 345,60 ₽
+const rub2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const fmtRub = (n) => `${rub2.format(n || 0)} ₽`;
