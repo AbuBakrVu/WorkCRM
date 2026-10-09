@@ -11,7 +11,7 @@ import { TimerCard } from '../components/TimerCard';
 const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const monday = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
 
-export default function TimeTracker() {
+export default function TimeTracker({ embedded = false, openAdd = false, onAddOpened }) {
   const { user, users, isManager, timer, stopTimer, toast, bump } = useApp();
   const [params, setParams] = useSearchParams();
   const [week, setWeek] = useState(() => monday(new Date()));
@@ -20,7 +20,8 @@ export default function TimeTracker() {
   const [startOpen, setStartOpen] = useState(false);
   const now = useNow();
 
-  useEffect(() => { if (params.get('new')) { setAddOpen(true); setParams({}, { replace: true }); } }, [params, setParams]);
+  useEffect(() => { if (!embedded && params.get('new')) { setAddOpen(true); setParams({}, { replace: true }); } }, [params, setParams, embedded]);
+  useEffect(() => { if (openAdd) { setAddOpen(true); onAddOpened?.(); } }, [openAdd, onAddOpened]);
 
   const from = toDateStr(week);
   const { data } = useLoad(`/time?from=${encodeURIComponent(week.toISOString())}&to=${encodeURIComponent(new Date(week.getTime() + 7 * 864e5).toISOString())}${who ? `&user_id=${who}` : ''}`);
@@ -65,11 +66,18 @@ export default function TimeTracker() {
 
   return (
     <div>
-      <PageHeader title="Учёт времени" subtitle="Таймер, табель по неделям и ручное добавление часов"
-        actions={<>
+      {embedded ? (
+        <div className="flex justify-end gap-2 mb-3">
           <Button icon={Download} onClick={exportCsv}>CSV</Button>
-          <Button icon={Plus} onClick={() => setAddOpen(true)}>Добавить вручную</Button>
-        </>} />
+          <Button icon={Plus} onClick={() => setAddOpen(true)}>Добавить время вручную</Button>
+        </div>
+      ) : (
+        <PageHeader title="Учёт времени" subtitle="Таймер, табель по неделям и ручное добавление часов"
+          actions={<>
+            <Button icon={Download} onClick={exportCsv}>CSV</Button>
+            <Button icon={Plus} onClick={() => setAddOpen(true)}>Добавить вручную</Button>
+          </>} />
+      )}
 
       {/* Блок таймера */}
       <div className="grid lg:grid-cols-3 gap-3 mb-5 stagger">

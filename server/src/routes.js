@@ -178,7 +178,9 @@ api.get('/clients/:id', wrap((req) => {
   c.projects = all('SELECT id, name, status, due_date FROM projects WHERE client_id = ? ORDER BY created_at DESC', id);
   c.deals = all('SELECT id, title, amount, stage FROM deals WHERE client_id = ? ORDER BY created_at DESC', id);
   c.tickets = all('SELECT id, title, status, priority, created_at FROM tickets WHERE client_id = ? ORDER BY created_at DESC LIMIT 20', id);
-  c.transactions = all('SELECT id, type, amount, date, description FROM transactions WHERE client_id = ? ORDER BY date DESC LIMIT 20', id);
+  // оплаты по счетам уже видны в списке счетов — здесь только прочие операции
+  c.transactions = all(`SELECT id, type, amount, date, description FROM transactions WHERE client_id = ?
+    AND id NOT IN (SELECT transaction_id FROM invoice_payments WHERE transaction_id IS NOT NULL) ORDER BY date DESC LIMIT 20`, id);
   if (['admin', 'manager'].includes(req.user.role)) {
     const today = todayMsk();
     c.invoices = all(`${INVOICE_SELECT} WHERE i.client_id = ? ORDER BY i.date DESC, i.id DESC LIMIT 30`, id).map((i) => shapeInvoice(i, today));
@@ -1977,8 +1979,10 @@ api.get('/dashboard', wrap((req) => {
     hours_by_day: all(`SELECT date(started_at) day, SUM(duration_sec) sec FROM time_entries
         WHERE started_at >= date('now','-13 days') GROUP BY day ORDER BY day`),
     pipeline: all(`SELECT stage, COUNT(*) n, COALESCE(SUM(amount),0) amount FROM deals GROUP BY stage`),
-    invoices: canFinance ? get(`SELECT COUNT(*) overdue, COALESCE(SUM(total - paid),0) overdue_sum FROM invoices
-      WHERE cancelled = 0 AND paid < total - 0.005 AND due_date IS NOT NULL AND due_date < ?`, todayMsk()) : null,
+    invoices: canFinance ? get(`SELECT COUNT(*) unpaid, COALESCE(SUM(total - paid),0) unpaid_sum,
+        COALESCE(SUM(due_date IS NOT NULL AND due_date < @d),0) overdue,
+        COALESCE(SUM(CASE WHEN due_date IS NOT NULL AND due_date < @d THEN total - paid END),0) overdue_sum
+      FROM invoices WHERE cancelled = 0 AND paid < total - 0.005`, { d: todayMsk() }) : null,
     finance: canFinance ? {
       month: get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) income,
                          COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) expense

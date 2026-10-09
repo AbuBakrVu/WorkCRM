@@ -1,20 +1,19 @@
 import { useMemo, useState } from 'react';
-import { Plus, Calendar, Handshake, TrendingUp, Trophy, Target, XCircle, BarChart3, Columns3 } from 'lucide-react';
+import { Plus, Calendar, Handshake, TrendingUp, Trophy, Target, XCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { useApp, useLoad, useStored } from '../lib/store';
+import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { DEAL_STAGE, LOST_REASONS, dealProb } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate, parseDate, plural } from '../lib/format';
 
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-import { Button, Avatar, PageHeader, Stat, Spinner, Card, Modal, Field, Tabs, cx } from '../components/ui';
+import { Button, Avatar, PageHeader, Stat, Spinner, Card, Modal, Field, cx } from '../components/ui';
 import { DealModal } from '../components/DealModal';
 import { ChartTip, C_INCOME, C_EXPENSE } from './Dashboard';
 
 export default function Pipeline() {
   const { data, setData } = useLoad('/deals');
   const { toast, bump } = useApp();
-  const [view, setView] = useStored('crm.pipeline.view', 'board');
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
   const [form, setForm] = useState(null);
@@ -44,8 +43,7 @@ export default function Pipeline() {
         <Stat label="Выиграно" value={fmtMoneyShort(won.reduce((a, d) => a + d.amount, 0))} sub={`${won.length} ${plural(won.length, 'сделка', 'сделки', 'сделок')}`} icon={Trophy} />
         <Stat label="Конверсия" value={`${conv}%`} sub="выигранные из закрытых" icon={TrendingUp} />
       </div>
-      <div className="mb-4"><Tabs value={view} onChange={setView} tabs={[{ value: 'board', label: 'Воронка', icon: Columns3 }, { value: 'stats', label: 'Аналитика', icon: BarChart3 }]} /></div>
-      {view === 'stats' ? <PipelineStats deals={data} /> : (
+      {(
         <div className="flex gap-3 overflow-x-auto pb-3">
           {Object.entries(DEAL_STAGE).map(([stage, s]) => {
             const items = data.filter((d) => d.stage === stage);
@@ -111,7 +109,7 @@ export function LostModal({ deal, onClose, onConfirm }) {
 }
 
 /* ---------- Аналитика продаж ---------- */
-function PipelineStats({ deals }) {
+export function PipelineStats({ deals }) {
   const open = deals.filter((d) => !['won', 'lost'].includes(d.stage));
   // Прогноз по месяцам ожидаемого закрытия: 6 месяцев вперёд + просроченные и без даты
   const months = useMemo(() => {

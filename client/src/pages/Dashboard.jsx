@@ -1,12 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
-import {
-  ListTodo, AlertTriangle, CheckCircle2, Timer, FolderKanban, Ticket, Plus, UserX, CalendarClock,
-} from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Ticket, Plus, UserX, CalendarClock } from 'lucide-react';
 import { useApp, useLoad, useNow } from '../lib/store';
-import { DEAL_STAGE, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
-import { fmtHours, fmtMoneyShort, fmtMoney, fmtDate, timeAgo, MONTHS, toDateStr, todayStr } from '../lib/format';
-import { Card, Stat, Avatar, Pill, Spinner, PageHeader, Button, cx } from '../components/ui';
+import { TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
+import { fmtHours, fmtMoneyShort, fmtMoney, fmtDate, todayStr } from '../lib/format';
+import { Card, Stat, Pill, Spinner, PageHeader, Button, cx } from '../components/ui';
 import { TaskStatusPill } from '../components/Tasks';
 import { SlaBadge } from './Tickets';
 import { TimerCard } from '../components/TimerCard';
@@ -52,40 +49,31 @@ export default function Dashboard() {
 
   const t = d.tasks || {};
   const today = todayStr();
-  const weekTotal = d.hours_week.reduce((a, u) => a + u.sec, 0);
-  const maxUser = Math.max(1, ...d.hours_week.map((u) => u.sec));
-
-  // Задачи за 14 дней: создано / закрыто
-  const taskDays = [];
-  for (let i = 13; i >= 0; i--) {
-    const dt = new Date(); dt.setDate(dt.getDate() - i);
-    const key = toDateStr(dt);
-    taskDays.push({
-      label: `${dt.getDate()}`,
-      created: d.tasks_created_by_day.find((x) => x.day === key)?.n || 0,
-      done: d.tasks_done_by_day.find((x) => x.day === key)?.n || 0,
-    });
-  }
-  const fin = d.finance;
-  const finChart = (fin?.months || []).map((m) => ({ ...m, label: MONTHS[+m.month.slice(5) - 1].slice(0, 3) }));
+  const inv = d.invoices;
+  const myWeek = d.hours_week.find((u) => u.id === user.id)?.sec || 0;
 
   return (
     <div>
-      <PageHeader title={`${greet()}, ${user.name.split(' ')[0]}`} subtitle="Общая картина по проектам, задачам и времени команды"
+      <PageHeader title={`${greet()}, ${user.name.split(' ')[0]}`} subtitle="Что требует внимания сегодня"
         actions={<>
           <Link to="/tickets?new=1"><Button icon={Ticket}>Заявка</Button></Link>
           <Link to="/projects?newtask=1"><Button variant="primary" icon={Plus}>Задача</Button></Link>
         </>} />
 
-      {/* KPI */}
+      {/* KPI — только то, что требует действий сегодня */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger">
         <Stat featured to="/projects" label="Открытые задачи" value={t.open || 0}
           sub={`${t.in_progress || 0} в работе · ${t.unassigned || 0} без исполнителя`} />
         <Stat to="/projects" label="Просрочено" value={t.overdue || 0} tone={t.overdue ? 'red' : undefined}
           sub={<span className={t.due_soon ? 'text-amber-600' : ''}>{t.due_soon || 0} со сроком в ближайшие 3 дня</span>} />
-        <Stat to="/projects" label="Закрыто за неделю" value={t.done_week || 0} sub={`создано за неделю: ${t.created_week || 0}`} />
-        <Stat to="/time" label="Часы за 7 дней" value={fmtHours(weekTotal)}
-          sub={`открытых заявок: ${d.tickets.open || 0}${d.tickets.overdue ? ` · ${d.tickets.overdue} просрочено` : ''}`} />
+        <Stat to="/tickets" label="Открытые заявки" value={d.tickets.open || 0} tone={d.tickets.overdue ? 'red' : undefined}
+          sub={d.tickets.overdue ? `${d.tickets.overdue} просрочено по SLA` : 'просроченных нет'} />
+        {isManager && inv ? (
+          <Stat to="/finance/invoices" label="Ждём оплату" value={fmtMoneyShort(inv.unpaid_sum)} tone={inv.overdue ? 'red' : undefined}
+            sub={inv.overdue ? `${inv.overdue} просрочено на ${fmtMoneyShort(inv.overdue_sum)}` : `${inv.unpaid} счетов, просроченных нет`} />
+        ) : (
+          <Stat to="/projects?view=time" label="Мои часы за неделю" value={fmtHours(myWeek)} sub="по учёту времени" />
+        )}
       </div>
 
       {/* Проекты + внимание */}
@@ -153,30 +141,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Динамика задач + таймер */}
-      <div className="grid lg:grid-cols-3 gap-3 mt-3 stagger">
-        <Card className="lg:col-span-2 p-5 min-w-0">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[15px] font-semibold">Задачи за 14 дней</h2>
-            <Legend items={[[C_EXPENSE, 'Создано'], [C_INCOME, 'Закрыто']]} />
-          </div>
-          <div className="h-[210px]">
-            <ResponsiveContainer>
-              <BarChart data={taskDays} barGap={2} barCategoryGap="24%">
-                <CartesianGrid vertical={false} stroke="var(--color-line)" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-ink-3)' }} />
-                <YAxis tickLine={false} axisLine={false} width={24} allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-ink-3)' }} />
-                <Tooltip cursor={{ fill: 'var(--color-canvas)' }} content={<ChartTip />} />
-                <Bar dataKey="created" name="Создано" fill={C_EXPENSE} radius={[4, 4, 0, 0]} maxBarSize={14} />
-                <Bar dataKey="done" name="Закрыто" fill={C_INCOME} radius={[4, 4, 0, 0]} maxBarSize={14} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-        <TimerCard />
-      </div>
-
-      {/* Мои задачи / заявки / часы */}
+      {/* Мои задачи / заявки / таймер */}
       <div className="grid lg:grid-cols-3 gap-3 mt-3 stagger">
         <Card className="min-w-0">
           <CardHead title="Мои задачи" extra={<span className="text-[12px] text-ink-3">{d.my_tasks.length}</span>} />
@@ -212,67 +177,8 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[15px] font-semibold">Часы за неделю</h2>
-            <Link to="/time" className="text-[12.5px] text-violet font-medium">Учёт →</Link>
-          </div>
-          <div className="space-y-3">
-            {d.hours_week.map((u) => (
-              <div key={u.id} className="flex items-center gap-2.5">
-                <Avatar user={u} size={26} ring={false} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between text-[12.5px]"><span className="truncate">{u.name}</span><span className="text-ink-2 tabular">{fmtHours(u.sec)}</span></div>
-                  <div className="h-1.5 bg-line rounded-full mt-1 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(u.sec / maxUser) * 100}%`, background: u.color }} /></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <TimerCard />
       </div>
-
-      {/* Деньги — только админ и менеджер */}
-      {isManager && fin && (
-        <div className="grid lg:grid-cols-3 gap-3 mt-3">
-          <Card className="lg:col-span-2 p-5 min-w-0">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-[15px] font-semibold">Доходы и расходы</h2>
-              <Legend items={[[C_INCOME, 'Доход'], [C_EXPENSE, 'Расход']]} />
-            </div>
-            <div className="text-[12px] text-ink-3 mb-3">В этом месяце: доход {fmtMoneyShort(fin.month.income)}, расход {fmtMoneyShort(fin.month.expense)}, прибыль {fmtMoneyShort(fin.month.income - fin.month.expense)}</div>
-            <div className="h-[200px]">
-              <ResponsiveContainer>
-                <BarChart data={finChart} barGap={2} barCategoryGap="28%">
-                  <CartesianGrid vertical={false} stroke="var(--color-line)" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-ink-3)' }} />
-                  <YAxis tickLine={false} axisLine={false} width={64} tick={{ fontSize: 11.5, fill: 'var(--color-ink-3)' }} tickFormatter={(v) => fmtMoneyShort(v).replace(' ₽', '')} />
-                  <Tooltip cursor={{ fill: 'var(--color-canvas)' }} content={<ChartTip money />} />
-                  <Bar dataKey="income" name="Доход" fill={C_INCOME} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="expense" name="Расход" fill={C_EXPENSE} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[15px] font-semibold">Воронка сделок</h2>
-              <Link to="/pipeline" className="text-[12.5px] text-violet font-medium">Открыть →</Link>
-            </div>
-            <div className="space-y-2.5">
-              {Object.entries(DEAL_STAGE).map(([k, s]) => {
-                const row = d.pipeline.find((p) => p.stage === k) || { n: 0, amount: 0 };
-                const max = Math.max(1, ...d.pipeline.map((p) => p.amount));
-                return (
-                  <div key={k}>
-                    <div className="flex justify-between text-[12.5px]"><span className="text-ink-2">{s.label} <span className="text-ink-3">· {row.n}</span></span><span className="tabular">{fmtMoneyShort(row.amount)}</span></div>
-                    <div className="h-1.5 bg-line rounded-full mt-1 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(row.amount / max) * 100}%`, background: s.color }} /></div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, FolderKanban, Ticket, Timer, Users, Building2, Handshake, Wallet, Settings, LogOut, Search,
-  Moon, Sun, CalendarDays, Package, Receipt, BarChart3, Monitor, BookOpen, Pin, PinOff, Plus, X, Play, Pause, Square, Bell, Menu, ChevronDown, Command, FileText, ListTodo,
+  LayoutDashboard, FolderKanban, Ticket, Timer, Building2, Handshake, Wallet, Settings, LogOut, Search,
+  Moon, Sun, Monitor, BookOpen, Pin, PinOff, Plus, Play, Pause, Square, Bell, Menu, Command, FileText, ListTodo,
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
@@ -17,26 +17,19 @@ const NAV = [
     { to: '/', label: 'Дашборд', icon: LayoutDashboard, end: true },
     { to: '/projects', label: 'Проекты', icon: FolderKanban },
     { to: '/tickets', label: 'Заявки', icon: Ticket, badge: 'tickets' },
-    { to: '/calendar', label: 'Календарь', icon: CalendarDays },
-    { to: '/time', label: 'Учёт времени', icon: Timer },
-    { to: '/assets', label: 'Оборудование', icon: Monitor },
-    { to: '/kb', label: 'База знаний', icon: BookOpen },
-    { to: '/team', label: 'Команда', icon: Users },
+    { to: '/infra', label: 'ИТ-инфраструктура', icon: Monitor },
   ] },
   { section: 'Продажи', items: [
     { to: '/clients', label: 'Клиенты', icon: Building2 },
     { to: '/pipeline', label: 'Воронка сделок', icon: Handshake },
-    { to: '/invoices', label: 'Счета', icon: Receipt, manager: true, badge: 'invoices' },
-    { to: '/catalog', label: 'Каталог', icon: Package },
   ] },
-  { section: 'Финансы', manager: true, items: [
-    { to: '/finance', label: 'Доходы и расходы', icon: Wallet },
-    { to: '/reports', label: 'Отчёты', icon: BarChart3 },
+  { section: 'Деньги', manager: true, items: [
+    { to: '/finance', label: 'Финансы', icon: Wallet, badge: 'invoices' },
   ] },
 ];
 
-const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets': 'Заявки', '/time': 'Учёт времени', '/team': 'Команда',
-  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки', '/calendar': 'Календарь', '/catalog': 'Каталог', '/invoices': 'Счета', '/reports': 'Отчёты', '/assets': 'Оборудование', '/kb': 'База знаний' };
+const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets': 'Заявки', '/infra': 'ИТ-инфраструктура',
+  '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки' };
 
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();
@@ -234,8 +227,8 @@ const KIND = {
   client: { icon: Building2, label: 'Клиент', url: (r) => `/clients?open=${r.id}`, sub: (r) => r.sub },
   deal: { icon: Handshake, label: 'Сделка', url: () => '/pipeline', sub: (r) => DEAL_STAGE[r.sub]?.label },
   task: { icon: ListTodo, label: 'Задача', url: (r) => `/projects?open=${r.project_id}&task=${r.id}`, sub: (r) => r.sub },
-  asset: { icon: Monitor, label: 'Оборудование', url: (r) => `/assets?open=${r.id}`, sub: (r) => r.sub },
-  kb: { icon: BookOpen, label: 'База знаний', url: (r) => `/kb?open=${r.id}`, sub: (r) => r.sub },
+  asset: { icon: Monitor, label: 'Оборудование', url: (r) => `/infra/assets?open=${r.id}`, sub: (r) => r.sub },
+  kb: { icon: BookOpen, label: 'База знаний', url: (r) => `/infra/kb?open=${r.id}`, sub: (r) => r.sub },
 };
 
 function SearchModal({ open, onClose }) {
@@ -256,7 +249,7 @@ function SearchModal({ open, onClose }) {
     { label: 'Новая заявка', to: '/tickets?new=1', icon: Ticket },
     { label: 'Новый проект', to: '/projects?new=1', icon: FolderKanban },
     { label: 'Новый клиент', to: '/clients?new=1', icon: Building2 },
-    { label: 'Добавить время', to: '/time?new=1', icon: Timer },
+    { label: 'Добавить время', to: '/projects?view=time&addtime=1', icon: Timer },
   ], []);
   if (!open) return null;
   return (

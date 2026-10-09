@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Receipt, Wallet, BarChart3, Monitor, BookOpen } from 'lucide-react';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { AppProvider, useApp } from './lib/store';
 import Layout from './components/Layout';
@@ -7,20 +8,37 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import Tickets from './pages/Tickets';
-import TimeTracker from './pages/TimeTracker';
-import Team from './pages/Team';
 import Clients from './pages/Clients';
 import Pipeline from './pages/Pipeline';
 import Finance from './pages/Finance';
 import Settings from './pages/Settings';
-import Calendar from './pages/Calendar';
-import Catalog from './pages/Catalog';
 import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
 import Assets from './pages/Assets';
 import Kb from './pages/Kb';
 import ClientReport from './pages/ClientReport';
 import Portal from './pages/Portal';
+import Hub from './components/Hub';
+
+// Старые адреса разделов → новые (сохраняем ?open=… и прочие параметры)
+function Moved({ to }) {
+  const { search } = useLocation();
+  const [path, q] = to.split('?');
+  const params = new URLSearchParams(search);
+  new URLSearchParams(q || '').forEach((v, k) => params.set(k, v));
+  const s = params.toString();
+  return <Navigate to={`${path}${s ? `?${s}` : ''}`} replace />;
+}
+
+const FINANCE = [
+  { value: 'invoices', label: 'Счета', icon: Receipt, element: <Invoices /> },
+  { value: 'operations', label: 'Доходы и расходы', icon: Wallet, element: <Finance /> },
+  { value: 'reports', label: 'Отчёты', icon: BarChart3, element: <Reports /> },
+];
+const INFRA = [
+  { value: 'assets', label: 'Оборудование', icon: Monitor, element: <Assets /> },
+  { value: 'kb', label: 'База знаний', icon: BookOpen, element: <Kb /> },
+];
 
 function Gate() {
   const { user, isManager } = useApp();
@@ -39,18 +57,20 @@ function Gate() {
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
         <Route path="tickets" element={<Tickets />} />
-        <Route path="calendar" element={<Calendar />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="kb" element={<Kb />} />
-        <Route path="time" element={<TimeTracker />} />
-        <Route path="team" element={<Team />} />
+        <Route path="infra/:tab?" element={<Hub title="ИТ-инфраструктура" base="/infra" tabs={INFRA} />} />
         <Route path="clients" element={<Clients />} />
         <Route path="pipeline" element={<Pipeline />} />
-        <Route path="catalog" element={<Catalog />} />
-        {isManager && <Route path="finance" element={<Finance />} />}
-        {isManager && <Route path="invoices" element={<Invoices />} />}
-        {isManager && <Route path="reports" element={<Reports />} />}
-        <Route path="settings" element={<Settings />} />
+        {isManager && <Route path="finance/:tab?" element={<Hub title="Финансы" base="/finance" tabs={FINANCE} />} />}
+        <Route path="settings/:tab?" element={<Settings />} />
+        {/* старые адреса */}
+        <Route path="calendar" element={<Moved to="/projects?view=calendar" />} />
+        <Route path="time" element={<Moved to="/projects?view=time" />} />
+        <Route path="assets" element={<Moved to="/infra/assets" />} />
+        <Route path="kb" element={<Moved to="/infra/kb" />} />
+        <Route path="team" element={<Moved to="/settings/team" />} />
+        <Route path="catalog" element={<Moved to="/settings/catalog" />} />
+        <Route path="invoices" element={<Moved to="/finance/invoices" />} />
+        <Route path="reports" element={<Moved to="/finance/reports" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

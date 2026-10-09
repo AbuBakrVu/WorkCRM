@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { X, ChevronDown, Check, ArrowUpRight, Search } from 'lucide-react';
@@ -421,17 +421,25 @@ export function Odometer({ value, className }) {
   );
 }
 
+// Раздел-«хаб» из нескольких страниц (Финансы, ИТ-инфраструктура…): страница внутри него
+// рисует обычный PageHeader, а он сам подставляет заголовок раздела и переключатель вкладок.
+export const HubContext = createContext(null);
+
 export function PageHeader({ title, subtitle, actions, icons }) {
+  const hub = useContext(HubContext);
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-[30px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>{title}</span></span></h1>
-          {icons}
+    <div className="mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[30px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>{hub?.title || title}</span></span></h1>
+            {icons}
+          </div>
+          {subtitle && <p className="text-ink-2 text-[14px] mt-1 reveal-sub">{subtitle}</p>}
         </div>
-        {subtitle && <p className="text-ink-2 text-[14px] mt-1 reveal-sub">{subtitle}</p>}
+        {actions && <div className="flex flex-wrap items-center gap-2 reveal-sub">{actions}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 reveal-sub">{actions}</div>}
+      {hub && hub.tabs.length > 1 && <Segmented className="mt-4 w-fit" items={hub.tabs} value={hub.value} onChange={hub.onChange} />}
     </div>
   );
 }

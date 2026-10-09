@@ -2,17 +2,36 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { ROLES, USER_COLORS } from '../lib/constants';
-import { Button, Card, Field, PageHeader, Avatar, Tabs, cx } from '../components/ui';
-import { useStored } from '../lib/store';
+import { UserRound, Users, Building, FileText, Package, Plug, Trash2 } from 'lucide-react';
+import { Button, Card, Field, PageHeader, Avatar, cx } from '../components/ui';
+import Hub from '../components/Hub';
+import Team from './Team';
+import Catalog from './Catalog';
 import { CompaniesSettings } from '../components/Companies';
 import { TemplatesSettings } from '../components/Documents';
-import { TrashSettings, AuthLogSettings, shortUA } from '../components/Trash';
+import { TrashSettings, shortUA } from '../components/Trash';
 import { fmtDateTime } from '../lib/format';
 import { useLoad } from '../lib/store';
 
 export default function Settings() {
-  const { user, setUser, toast, bump, isManager } = useApp();
-  const [tab, setTab] = useStored('crm.settings.tab', 'profile');
+  const { user, isManager } = useApp();
+  const isAdmin = user.role === 'admin';
+  const pane = (subtitle, el, wide) => <div className={wide ? '' : 'max-w-[900px]'}><PageHeader title="Настройки" subtitle={subtitle} />{el}</div>;
+  return (
+    <Hub title="Настройки" base="/settings" tabs={[
+      { value: 'profile', label: 'Профиль', icon: UserRound, element: <Profile /> },
+      { value: 'team', label: 'Команда', icon: Users, element: <Team /> },
+      { value: 'companies', label: 'Мои компании', icon: Building, hidden: !isManager, element: pane('Реквизиты, подпись и печать — для счетов, актов и КП', <CompaniesSettings />) },
+      { value: 'templates', label: 'Шаблоны документов', icon: FileText, hidden: !isManager, element: pane('Word-шаблоны КП, счетов и актов', <TemplatesSettings />) },
+      { value: 'catalog', label: 'Каталог', icon: Package, element: <Catalog /> },
+      { value: 'integrations', label: 'Интеграции', icon: Plug, hidden: !isAdmin, element: pane('Внешние сервисы', <Integrations />) },
+      { value: 'trash', label: 'Корзина', icon: Trash2, hidden: !isManager, element: pane('Удалённые записи можно восстановить', <TrashSettings />) },
+    ]} />
+  );
+}
+
+function Profile() {
+  const { user, setUser, toast, bump } = useApp();
   const [f, setF] = useState({ name: user.name, position: user.position || '', phone: user.phone || '', color: user.color });
   const [pw, setPw] = useState({ current_password: '', new_password: '' });
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
@@ -28,15 +47,7 @@ export default function Settings() {
 
   return (
     <div className="max-w-[900px]">
-      <PageHeader title="Настройки" subtitle="Профиль, безопасность и реквизиты компаний" />
-      {isManager && (
-        <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Профиль' }, { value: 'companies', label: 'Мои компании' },
-          { value: 'templates', label: 'Шаблоны документов' },
-          { value: 'trash', label: 'Корзина' },
-          ...(user.role === 'admin' ? [{ value: 'integrations', label: 'Интеграции' }, { value: 'security', label: 'Журнал входов' }] : [])]} /></div>
-      )}
-      {isManager && tab === 'companies' ? <CompaniesSettings /> : isManager && tab === 'trash' ? <TrashSettings /> : isManager && tab === 'templates' ? <TemplatesSettings />
-        : user.role === 'admin' && tab === 'integrations' ? <Integrations /> : user.role === 'admin' && tab === 'security' ? <AuthLogSettings /> : (<>
+      <PageHeader title="Настройки" subtitle="Ваш профиль, пароль и последние входы" />
       <Card className="p-6">
         <div className="flex items-center gap-4 mb-5">
           <Avatar user={{ ...user, ...f }} size={56} ring={false} />
@@ -61,7 +72,6 @@ export default function Settings() {
         </form>
       </Card>
       <MyLogins />
-      </>)}
     </div>
   );
 }

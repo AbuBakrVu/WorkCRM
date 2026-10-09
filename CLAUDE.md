@@ -48,6 +48,7 @@ cd server && DATA_DIR=./dev-data npm run seed -- --force        # пересоз
 - `client/src/lib/` — `api.js` (fetch-обёртка), `store.jsx` (контекст: user, users, clients, projects, таймер, `toast`, `bump()` — перезагрузить данные после изменения, `useLoad(url)`), `format.js` (даты/деньги/длительности, `parseDate` для дат SQLite в UTC), `constants.js` (статусы, приоритеты, цвета, подписи).
 - `client/src/components/ui.jsx` — UI-кит (Button, Modal, Drawer, Popover, Select, Field, StatusDot, Progress, AvatarStack, Stat…). Новые экраны собирай из него.
 - `client/src/pages/*` — страницы. Маршруты — `client/src/App.jsx`, меню — `NAV` в `components/Layout.jsx`.
+  Разделы-хабы (`components/Hub.jsx`): «Финансы» `/finance/:tab` (счета, доходы и расходы, отчёты), «ИТ-инфраструктура» `/infra/:tab` (оборудование, база знаний), «Настройки» `/settings/:tab` (профиль, команда, компании, шаблоны, каталог, интеграции, корзина). Календарь, учёт времени и повторяющиеся задачи/счета — вкладки «Проектов» (`/projects?view=…`). Старые адреса (`/invoices`, `/kb`, `/time`…) перенаправляются в `App.jsx` — не дублируй одну информацию в нескольких разделах.
 
 ## Стиль
 - Дизайн: светлый, белые карточки `rounded-2xl border-line`, кнопки-«пилюли» (`.chip`), акцент — зелёный `brand` (главные действия) и фиолетовый `violet` (таймер, фокус). Токены цветов — в `client/src/index.css` (`@theme`).

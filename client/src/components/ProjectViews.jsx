@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Clock, Calendar, Flag, MessageSquare } from 'lucide-react';
-import { useApp, useLoad } from '../lib/store';
+import { ChevronDown, ChevronRight, Clock, Flag, MessageSquare } from 'lucide-react';
 import { api } from '../lib/api';
 import { PROJECT_STATUS, TASK_STATUS } from '../lib/constants';
-import { fmtDate, fmtHM, fmtHours, parseDate, MONTHS, toDateStr } from '../lib/format';
-import { AvatarStack, Progress, StatusDot, Card, Avatar, cx } from './ui';
+import { fmtDate, parseDate, MONTHS, toDateStr } from '../lib/format';
+import { AvatarStack, Card, cx } from './ui';
 
 /* ---------------- Канбан задач ---------------- */
 // Цвет метки проекта — стабильный по названию
@@ -188,55 +187,6 @@ export function ProjectGantt({ projects, onOpen }) {
             })}
           </div>
         </div>
-      </div>
-    </Card>
-  );
-}
-
-/* ---------------- Учёт времени по проектам ---------------- */
-export function ProjectTimeView({ projects }) {
-  const { users } = useApp();
-  const [period, setPeriod] = useState(30);
-  const from = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - period + 1); return toDateStr(d); }, [period]);
-  const { data } = useLoad(`/time?from=${from}`);
-  const ids = new Set(projects.map((p) => p.id));
-  const matrix = {}; const byUser = {};
-  (data || []).forEach((e) => {
-    if (!e.project_id || !ids.has(e.project_id)) return;
-    matrix[e.project_id] ??= {}; matrix[e.project_id][e.user_id] = (matrix[e.project_id][e.user_id] || 0) + e.live_sec;
-    byUser[e.user_id] = (byUser[e.user_id] || 0) + e.live_sec;
-  });
-  const cols = users.filter((u) => byUser[u.id]);
-  const rows = projects.filter((p) => matrix[p.id]).map((p) => ({ p, total: Object.values(matrix[p.id]).reduce((a, b) => a + b, 0) })).sort((a, b) => b.total - a.total);
-  const grand = rows.reduce((a, r) => a + r.total, 0);
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between px-4 h-12 border-b border-line">
-        <span className="text-[13px] text-ink-2">Всего за период: <b className="text-ink tabular">{fmtHours(grand)}</b></span>
-        <div className="flex items-center gap-1 p-0.5 rounded-full border border-line">
-          {[[7, '7 дней'], [30, '30 дней'], [90, '90 дней']].map(([d, l]) => (
-            <button key={d} onClick={() => setPeriod(d)} className={cx('px-3 h-7 rounded-full text-[12px] font-medium', period === d ? 'bg-ink text-white' : 'text-ink-2')}>{l}</button>
-          ))}
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead><tr className="bg-canvas/70 border-b border-line">
-            <th className="th min-w-[240px]">Проект</th>
-            {cols.map((u) => <th key={u.id} className="th text-right"><span className="inline-flex items-center gap-1.5"><Avatar user={u} size={20} ring={false} />{u.name.split(' ')[0]}</span></th>)}
-            <th className="th text-right">Итого</th>
-          </tr></thead>
-          <tbody>
-            {rows.map(({ p, total }) => (
-              <tr key={p.id} className="border-b border-line hover:bg-canvas/50">
-                <td className="td text-ink">{p.name}</td>
-                {cols.map((u) => <td key={u.id} className="td text-right tabular">{matrix[p.id][u.id] ? fmtHM(matrix[p.id][u.id]) : <span className="text-ink-3">—</span>}</td>)}
-                <td className="td text-right tabular font-semibold text-ink">{fmtHM(total)}</td>
-              </tr>
-            ))}
-            {!rows.length && <tr><td colSpan={cols.length + 2} className="td text-center text-ink-3 py-10">Нет записей времени за период</td></tr>}
-          </tbody>
-        </table>
       </div>
     </Card>
   );

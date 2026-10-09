@@ -13,7 +13,7 @@ import { nextDate } from '../lib/recurrence';
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
-export default function Calendar() {
+export default function Calendar({ embedded = false }) {
   const { user, toast, bump } = useApp();
   const { data: tasks, setData: setTasks } = useLoad('/tasks');
   const { data: deals } = useLoad('/deals');
@@ -69,7 +69,7 @@ export default function Calendar() {
 
   return (
     <div>
-      <PageHeader title="Календарь" subtitle="Сроки задач, плановые даты сделок и будущие повторяющиеся задачи" />
+      {!embedded && <PageHeader title="Календарь" subtitle="Сроки задач, плановые даты сделок и будущие повторяющиеся задачи" />}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="flex items-center gap-1">
           <button className="chip !px-2.5" onClick={() => shift(-1)}><ChevronLeft size={16} /></button>

@@ -63,7 +63,7 @@ export function DealModal({ deal, onClose }) {
     if (!items.length) return toast('Добавьте в сделку товары или услуги', 'error');
     if (!f.client_id) return toast('Укажите клиента', 'error');
     if (!(await submit())) return;
-    try { const inv = await api.post('/invoices', { deal_id: f.id }); toast(`Счёт № ${inv.number} выставлен`); navigate(`/invoices?open=${inv.id}`); }
+    try { const inv = await api.post('/invoices', { deal_id: f.id }); toast(`Счёт № ${inv.number} выставлен`); navigate(`/finance/invoices?open=${inv.id}`); }
     catch (e) { toast(e.message, 'error'); }
   };
   const remove = async () => { await api.del(`/deals/${f.id}`); toast('Сделка удалена'); bump(); onClose(); };
@@ -99,7 +99,7 @@ export function DealModal({ deal, onClose }) {
               <h3 className="text-[14px] font-semibold mb-2">Счета по сделке</h3>
               <div className="border border-line rounded-xl divide-y divide-line">
                 {invoices.map((i) => (
-                  <button key={i.id} onClick={() => navigate(`/invoices?open=${i.id}`)} className="w-full flex items-center gap-3 px-3 h-10 text-[13px] hover:bg-canvas text-left">
+                  <button key={i.id} onClick={() => navigate(`/finance/invoices?open=${i.id}`)} className="w-full flex items-center gap-3 px-3 h-10 text-[13px] hover:bg-canvas text-left">
                     <span className="font-semibold w-16">№ {i.number}</span><span className="text-ink-3 w-24">{fmtDate(i.date, true)}</span>
                     <span className="flex-1 tabular">{fmtRub(i.total)}</span><StatusDot color={INVOICE_STATUS[i.status].color} label={INVOICE_STATUS[i.status].label} />
                   </button>

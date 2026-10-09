@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Users, PiggyBank, FileText, Printer, AlertTriangle, ArrowUpDown } from 'lucide-react';
+import { Users, PiggyBank, Handshake, Printer, AlertTriangle, ArrowUpDown } from 'lucide-react';
+import { PipelineStats } from './Pipeline';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { fmtMoney, todayStr, toDateStr, plural } from '../lib/format';
-import { PageHeader, Tabs, Card, Spinner, Empty, Button, Field, Select, Avatar, Segmented, cx, nameOptions } from '../components/ui';
+import { PageHeader, Tabs, Card, Spinner, Empty, Button, Field, Select, Avatar, Segmented, Modal, cx, nameOptions } from '../components/ui';
 
 // Пресеты периода
 function presetRange(p) {
@@ -31,14 +32,20 @@ export function PeriodPicker({ value, onChange }) {
 export default function Reports() {
   const [tab, setTab] = useStored('crm.reports.tab', 'team');
   const [range, setRange] = useState(() => { const r = presetRange('month'); return { from: r[0], to: r[1] }; });
+  const cur = ['team', 'profit', 'sales'].includes(tab) ? tab : 'team';
   return (
     <div>
-      <PageHeader title="Отчёты" subtitle="Работа команды, рентабельность клиентов и отчёты для клиентов" />
-      <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'team', label: 'Сотрудники', icon: Users }, { value: 'profit', label: 'Рентабельность клиентов', icon: PiggyBank }, { value: 'client', label: 'Отчёт клиенту', icon: FileText }]} /></div>
-      <div className="mb-4"><PeriodPicker value={range} onChange={setRange} /></div>
-      {tab === 'team' ? <TeamReport range={range} /> : tab === 'profit' ? <ProfitReport range={range} /> : <ClientReportForm range={range} />}
+      <PageHeader title="Отчёты" subtitle="Загрузка команды, рентабельность клиентов и аналитика продаж. Отчёт для клиента — в карточке клиента" />
+      <div className="mb-4"><Tabs value={cur} onChange={setTab} tabs={[{ value: 'team', label: 'Сотрудники', icon: Users }, { value: 'profit', label: 'Рентабельность клиентов', icon: PiggyBank }, { value: 'sales', label: 'Продажи', icon: Handshake }]} /></div>
+      {cur !== 'sales' && <div className="mb-4"><PeriodPicker value={range} onChange={setRange} /></div>}
+      {cur === 'team' ? <TeamReport range={range} /> : cur === 'profit' ? <ProfitReport range={range} /> : <SalesReport />}
     </div>
   );
+}
+
+function SalesReport() {
+  const { data } = useLoad('/deals');
+  return data ? <PipelineStats deals={data} /> : <Spinner />;
 }
 
 function SortTh({ k, sort, setSort, children, right }) {
@@ -141,26 +148,30 @@ function ProfitReport({ range }) {
   </>);
 }
 
-function ClientReportForm({ range }) {
-  const { clients, projects } = useApp();
+// Кнопка в карточке клиента: печатный отчёт о выполненных работах за период
+export function ClientReportButton({ client }) {
+  const { projects } = useApp();
   const { data: companies } = useLoad('/companies');
-  const [clientId, setClientId] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [range, setRange] = useState(() => { const r = presetRange('month'); return { from: r[0], to: r[1] }; });
   const [projectId, setProjectId] = useState(null);
   const [companyId, setCompanyId] = useState(null);
-  const open = () => {
+  const go = () => {
     const q = new URLSearchParams({ from: range.from, to: range.to });
-    if (clientId) q.set('client_id', clientId); if (projectId) q.set('project_id', projectId); if (companyId) q.set('company_id', companyId);
+    if (projectId) q.set('project_id', projectId); else q.set('client_id', client.id);
+    if (companyId) q.set('company_id', companyId);
     window.open(`/report/client?${q}`, '_blank');
   };
-  return (
-    <Card className="p-6 max-w-[720px]">
-      <p className="text-[13px] text-ink-2 mb-4">Документ для клиента: какие работы выполнены за период, сколько часов потрачено, с каким итогом закрыты задачи и заявки. Открывается в новой вкладке — его можно распечатать или сохранить в PDF.</p>
+  return (<>
+    <Button icon={Printer} onClick={() => setOpen(true)}>Отчёт клиенту</Button>
+    <Modal open={open} onClose={() => setOpen(false)} title="Отчёт о выполненных работах" width={640}
+      footer={<><Button onClick={() => setOpen(false)}>Отмена</Button><Button variant="primary" icon={Printer} onClick={go}>Сформировать</Button></>}>
+      <p className="text-[13px] text-ink-2 mb-4">Какие работы выполнены за период, сколько часов потрачено, с каким итогом закрыты задачи и заявки. Откроется в новой вкладке — можно распечатать или сохранить в PDF.</p>
+      <div className="mb-4"><PeriodPicker value={range} onChange={setRange} /></div>
       <div className="grid sm:grid-cols-2 gap-3.5">
-        <Field label="Клиент"><Select value={clientId} onChange={setClientId} placeholder="—" search options={nameOptions(clients)} /></Field>
-        <Field label="или проект"><Select value={projectId} onChange={setProjectId} placeholder="—" search options={nameOptions(projects)} /></Field>
-        <Field label="От компании" className="sm:col-span-2"><Select value={companyId} onChange={setCompanyId} placeholder="По умолчанию" options={nameOptions(companies || [])} /></Field>
+        <Field label="Только по проекту"><Select value={projectId} onChange={setProjectId} placeholder="Все проекты клиента" search options={nameOptions(projects.filter((p) => p.client_id === client.id))} /></Field>
+        <Field label="От компании"><Select value={companyId} onChange={setCompanyId} placeholder="По умолчанию" options={nameOptions(companies || [])} /></Field>
       </div>
-      <Button className="mt-5" variant="primary" icon={Printer} disabled={!clientId && !projectId} onClick={open}>Сформировать отчёт</Button>
-    </Card>
-  );
+    </Modal>
+  </>);
 }

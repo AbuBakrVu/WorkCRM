@@ -11,6 +11,7 @@ import { RequisitesFields, InnButton } from '../components/Requisites';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, Tabs, cx } from '../components/ui';
 import { HistoryPanel } from '../components/History';
 import { PortalAccess } from '../components/PortalAccess';
+import { ClientReportButton } from './Reports';
 
 export default function Clients() {
   const { data, loading } = useLoad('/clients');
@@ -151,9 +152,10 @@ function ClientDrawer({ id, onClose, onEdit }) {
           <Section title="Сделки" items={c.deals} render={(d) => <><span className="flex-1 truncate">{d.title}</span><span className="tabular text-ink-2 mr-3">{fmtMoney(d.amount)}</span><StatusDot color={DEAL_STAGE[d.stage].color} label={DEAL_STAGE[d.stage].label} /></>} />
           <Section title="Заявки" items={c.tickets} render={(t) => <><span className="text-ink-3 tabular w-10">#{t.id}</span><span className="flex-1 truncate">{t.title}</span><StatusDot color={TICKET_STATUS[t.status].color} label={TICKET_STATUS[t.status].label} /></>} />
  {isManager && c.invoices && <Section title={<>Счета{c.debt > 0 && <span className="ml-2 text-[12.5px] font-medium text-amber-600">долг {fmtMoney(c.debt)}</span>}</>} items={c.invoices} render={(i) => <>
-            <Link to={`/invoices?open=${i.id}`} className="flex-1 flex items-center gap-2 min-w-0 hover:text-violet"><span className="font-semibold w-14">№ {i.number}</span><span className="text-ink-3 w-16">{fmtDate(i.date)}</span><span className="truncate">{i.title || i.deal_title || ''}</span></Link>
+            <Link to={`/finance/invoices?open=${i.id}`} className="flex-1 flex items-center gap-2 min-w-0 hover:text-violet"><span className="font-semibold w-14">№ {i.number}</span><span className="text-ink-3 w-16">{fmtDate(i.date)}</span><span className="truncate">{i.title || i.deal_title || ''}</span></Link>
             <span className="tabular text-ink-2 mr-3">{fmtMoney(i.total)}</span><StatusDot color={INVOICE_STATUS[i.status].color} label={INVOICE_STATUS[i.status].label} /></>} />}
-          {isManager && <Section title="Платежи" items={c.transactions} render={(x) => <><span className="text-ink-3 w-16">{fmtDate(x.date)}</span><span className="flex-1 truncate">{x.description}</span><span className={cx('tabular', x.type === 'income' ? 'text-emerald-600' : 'text-ink-2')}>{x.type === 'income' ? '+' : '−'}{fmtMoney(x.amount)}</span></>} />}
+          {isManager && c.transactions?.length > 0 && <Section title="Прочие платежи" items={c.transactions} render={(x) => <><span className="text-ink-3 w-16">{fmtDate(x.date)}</span><span className="flex-1 truncate">{x.description}</span><span className={cx('tabular', x.type === 'income' ? 'text-emerald-600' : 'text-ink-2')}>{x.type === 'income' ? '+' : '−'}{fmtMoney(x.amount)}</span></>} />}
+          {isManager && <ClientReportButton client={c} />}
           {isManager && c.type !== 'internal' && <PortalAccess clientId={c.id} />}
           <HistoryPanel entity="client" id={c.id} />
           {isManager && <div className="pt-2 border-t border-line"><ConfirmButton onConfirm={remove}>Удалить клиента</ConfirmButton></div>}

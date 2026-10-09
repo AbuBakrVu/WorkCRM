@@ -299,7 +299,7 @@ function TicketDrawer({ id, onClose }) {
             <Field label="Заявитель"><input className="input" defaultValue={t.requester || ''} onBlur={(e) => e.target.value !== (t.requester || '') && patch({ requester: e.target.value })} /></Field>
             <Field label="Клиент"><Select value={t.client_id} onChange={(v) => patch({ client_id: v ? +v : null })} placeholder="—" search options={nameOptions(clients)} /></Field>
             <Field label="Проект"><Select value={t.project_id} onChange={(v) => patch({ project_id: v ? +v : null })} placeholder="—" search options={nameOptions(projects)} /></Field>
-            {t.asset_id && <div className="col-span-2 text-[13px]"><span className="text-ink-3">Устройство: </span><Link to={`/assets?open=${t.asset_id}`} className="text-violet hover:underline">{t.asset_name}</Link></div>}
+            {t.asset_id && <div className="col-span-2 text-[13px]"><span className="text-ink-3">Устройство: </span><Link to={`/infra/assets?open=${t.asset_id}`} className="text-violet hover:underline">{t.asset_name}</Link></div>}
           </div>
           {t.requester_contact && <div className="text-[13px] text-ink-2">Контакт: {t.requester_contact}</div>}
           <Field label="Описание"><textarea className="input" rows={3} defaultValue={t.description || ''} onBlur={(e) => e.target.value !== (t.description || '') && patch({ description: e.target.value })} /></Field>

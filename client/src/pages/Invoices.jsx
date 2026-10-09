@@ -18,7 +18,8 @@ export default function Invoices() {
   const { data, reload } = useLoad('/invoices');
   const { isManager } = useApp();
   const [params, setParams] = useSearchParams();
-  const [tab, setTab] = useStored('crm.invoices.tab', 'unpaid');
+  const [tab0, setTab] = useStored('crm.invoices.tab', 'unpaid');
+  const tab = tab0 === 'schedules' ? 'unpaid' : tab0;
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState(null);
   const [form, setForm] = useState(null);
@@ -51,9 +52,9 @@ export default function Invoices() {
         <Stat label="Выставлено в этом месяце" value={fmtMoneyShort(issuedMonth.reduce((a, i) => a + i.total, 0))} sub={`${issuedMonth.length} ${plural(issuedMonth.length, 'счёт', 'счёта', 'счетов')}`} icon={Receipt} />
       </div>
       <Tabs value={tab} onChange={setTab} tabs={[...Object.entries(TABS).map(([value, label]) => ({ value, label, count: counts[value] })),
-        { value: 'debtors', label: 'Должники', icon: Users }, { value: 'schedules', label: 'Повторяющиеся', icon: Repeat }]} />
+        { value: 'debtors', label: 'Должники', icon: Users }]} />
       <div className="mt-4">
-        {tab === 'debtors' ? <Debtors /> : tab === 'schedules' ? <Schedules /> : (<>
+        {tab === 'debtors' ? <Debtors /> : (<>
           <div className={cx('flex items-center gap-1.5 h-9 px-3 rounded-full border bg-panel w-fit mb-3', q ? 'border-violet/40' : 'border-line')}>
             <Search size={15} className="text-ink-3" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Номер, клиент, сделка" className="outline-none text-[13px] w-52 bg-transparent" />
@@ -275,7 +276,7 @@ function Debtors() {
 }
 
 /* ---------- Повторяющиеся счета ---------- */
-function Schedules() {
+export function Schedules() {
   const { data, reload } = useLoad('/invoice-schedules');
   const { isManager, toast, bump } = useApp();
   const [form, setForm] = useState(null);

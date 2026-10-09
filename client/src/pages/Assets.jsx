@@ -116,7 +116,7 @@ function AssetDrawer({ id, onClose, onEdit }) {
             )}
           </div>
           {a.articles.length > 0 && <div><h3 className="text-[14px] font-semibold mb-2">В базе знаний</h3>
-            {a.articles.map((k) => <Link key={k.id} to={`/kb?open=${k.id}`} className="flex items-center gap-2 text-[13px] py-1 hover:text-violet"><BookOpen size={14} className="text-ink-3" />{k.title}</Link>)}</div>}
+            {a.articles.map((k) => <Link key={k.id} to={`/infra/kb?open=${k.id}`} className="flex items-center gap-2 text-[13px] py-1 hover:text-violet"><BookOpen size={14} className="text-ink-3" />{k.title}</Link>)}</div>}
           <HistoryPanel entity="asset" id={a.id} />
           {isManager && <div className="pt-2 border-t border-line"><ConfirmButton onConfirm={remove}>Удалить устройство</ConfirmButton></div>}
         </div>

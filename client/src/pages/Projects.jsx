@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Info, Star, MoreHorizontal, List, ChartGantt, Kanban, Clock, Plus, Search, User, X, ChevronDown, ChevronRight,
-  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, ListTodo, MessageSquare, ListChecks, GitBranch, Lock, CornerDownRight, Repeat, Upload,
+  Download, FolderKanban, Settings2, Play, ChevronsDownUp, ChevronsUpDown, Calendar, CalendarDays, ListTodo, MessageSquare, ListChecks, GitBranch, Lock, CornerDownRight, Repeat, Upload,
 } from 'lucide-react';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
@@ -14,7 +14,10 @@ import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskStatusPill, TaskWorkActi
 import { RecurrenceList } from '../components/Recurrence';
 import { SavedViews } from '../components/SavedViews';
 import { ImportModal } from '../components/Import';
-import { TaskKanban, ProjectGantt, ProjectTimeView } from '../components/ProjectViews';
+import { TaskKanban, ProjectGantt } from '../components/ProjectViews';
+import CalendarView from './Calendar';
+import TimeTracker from './TimeTracker';
+import { Schedules } from './Invoices';
 
 export default function Projects() {
   const { users, bump, toast, startTimer, startWork, askWork, isManager } = useApp();
@@ -33,6 +36,7 @@ export default function Projects() {
   const [taskForm, setTaskForm] = useState(null);      // { projectId } | null
   const [projectForm, setProjectForm] = useState(null); // {} — новый, project — редактирование
   const [importing, setImporting] = useState(false);
+  const [addTime, setAddTime] = useState(false); // из быстрого меню «Добавить время»
 
   // Переходы из поиска, дашборда, избранного: ?open=<проект>&task=<задача>&new=1
   useEffect(() => {
@@ -44,8 +48,10 @@ export default function Projects() {
     if (t) setTaskId(t);
     if (params.get('new')) setProjectForm({});
     if (params.get('newtask')) setTaskForm({ projectId: o || null });
-    if (o || t || params.get('new') || params.get('newtask')) setParams({}, { replace: true });
-  }, [params, setParams, setExpanded]);
+    const v = params.get('view'); if (v) setView(v);
+    if (params.get('addtime')) setAddTime(true);
+    if (o || t || v || params.get('new') || params.get('newtask')) setParams({}, { replace: true });
+  }, [params, setParams, setExpanded, setView]);
 
   const today = todayStr();
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
@@ -140,13 +146,14 @@ export default function Projects() {
           { value: 'list', label: 'Проекты и задачи', icon: List },
           { value: 'kanban', label: 'Канбан задач', icon: Kanban },
           { value: 'gantt', label: 'Диаграмма Ганта', icon: ChartGantt },
+          { value: 'calendar', label: 'Календарь', icon: CalendarDays },
           { value: 'time', label: 'Учёт времени', icon: Clock },
-          { value: 'recurring', label: 'Повторяющиеся', icon: Repeat },
+          { value: 'recurring', label: 'Автоматизация', icon: Repeat },
         ]} />
       </div>
 
       {/* Панель фильтров */}
-      {view !== 'time' && view !== 'gantt' && view !== 'recurring' && (
+      {(view === 'list' || view === 'kanban') && (
         <div className="flex flex-wrap items-center gap-2 mt-4">
           {view === 'list' && (
             <Segmented value={filter} onChange={setFilter}
@@ -220,10 +227,14 @@ export default function Projects() {
             userMap={userMap} onOpen={setTaskId} onPatch={patchTask} />
         ) : view === 'gantt' ? (
           <ProjectGantt projects={projects} onOpen={(id) => { setView('list'); setExpanded((e) => [...new Set([...e, id])]); }} />
-        ) : view === 'recurring' ? (
+        ) : view === 'calendar' ? (
+          <CalendarView embedded />
+        ) : view === 'recurring' ? (<>
+          <h2 className="text-[15px] font-semibold mb-2.5">Повторяющиеся задачи</h2>
           <RecurrenceList />
-        ) : (
-          <ProjectTimeView projects={projects} />
+          {isManager && <><h2 className="text-[15px] font-semibold mt-6 mb-2.5">Повторяющиеся счета</h2><Schedules /></>}
+        </>) : (
+          <TimeTracker embedded openAdd={addTime} onAddOpened={() => setAddTime(false)} />
         )}
       </div>
 
