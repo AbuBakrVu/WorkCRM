@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Ticket, Timer, Building2, Handshake, Wallet, Settings, LogOut, Search,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
-import { Avatar, IconButton, Popover, Odometer, cx } from './ui';
+import { Avatar, IconButton, Popover, Odometer, Spinner, cx } from './ui';
 import { fmtHMS, timeAgo } from '../lib/format';
 import { TimerStartModal } from './TimerStart';
 import { WorkReportModal } from './WorkReport';
@@ -140,7 +140,7 @@ export default function Layout() {
       <div className={cx('flex-1 min-w-0 flex flex-col transition-[padding] duration-300', pinned ? 'lg:pl-[296px]' : 'lg:pl-[116px]')}>
         <Topbar crumb={crumb} onMenu={() => setMobileOpen(true)} onSearch={() => setSearchOpen(true)} dash={dash} />
         <main className="flex-1 overflow-y-auto">
-          <div key={loc.pathname} className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6 page-enter"><Outlet /></div>
+          <div key={loc.pathname} className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6 page-enter"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
         </main>
       </div>
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />

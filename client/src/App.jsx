@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Receipt, Wallet, BarChart3, Monitor, BookOpen } from 'lucide-react';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
@@ -5,19 +6,19 @@ import { AppProvider, useApp } from './lib/store';
 import Layout from './components/Layout';
 import { Spinner, cx } from './components/ui';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Projects from './pages/Projects';
-import Tickets from './pages/Tickets';
-import Clients from './pages/Clients';
-import Pipeline from './pages/Pipeline';
-import Finance from './pages/Finance';
-import Settings from './pages/Settings';
-import Invoices from './pages/Invoices';
-import Reports from './pages/Reports';
-import Assets from './pages/Assets';
-import Kb from './pages/Kb';
-import ClientReport from './pages/ClientReport';
-import Portal from './pages/Portal';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Projects = lazy(() => import('./pages/Projects'));
+const Tickets = lazy(() => import('./pages/Tickets'));
+const Clients = lazy(() => import('./pages/Clients'));
+const Pipeline = lazy(() => import('./pages/Pipeline'));
+const Finance = lazy(() => import('./pages/Finance'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Invoices = lazy(() => import('./pages/Invoices'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Assets = lazy(() => import('./pages/Assets'));
+const Kb = lazy(() => import('./pages/Kb'));
+const ClientReport = lazy(() => import('./pages/ClientReport'));
+const Portal = lazy(() => import('./pages/Portal'));
 import Hub from './components/Hub';
 
 // Старые адреса разделов → новые (сохраняем ?open=… и прочие параметры)
@@ -96,7 +97,7 @@ export default function App() {
   return (
     <AppProvider>
       <BrowserRouter>
-        <Gate />
+        <Suspense fallback={<div className="h-full flex items-center justify-center"><Spinner /></div>}><Gate /></Suspense>
         <Toasts />
       </BrowserRouter>
     </AppProvider>
