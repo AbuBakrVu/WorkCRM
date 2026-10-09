@@ -19,7 +19,6 @@ import { HttpError } from './routes/shared.js';
 export { getSetting } from './routes/companies.js';
 export { nextDocNumber, runInvoiceSchedules } from './routes/invoices.js';
 export { mentionedUsers, purgeNotifications, runRecurrences } from './routes/tasks.js';
-export { calcItems } from './routes/deals.js';
 
 /* ---------- errors ---------- */
 api.use((req, res) => res.status(404).json({ error: 'Маршрут не найден' }));

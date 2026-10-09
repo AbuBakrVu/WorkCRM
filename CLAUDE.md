@@ -40,7 +40,7 @@ cd server && DATA_DIR=./dev-data npm run seed -- --force        # пересоз
 - `server/src/db.js` — базовая схема v0 (CREATE TABLE IF NOT EXISTS — **не менять**) + **миграции** (массив `MIGRATIONS`, версия в `PRAGMA user_version`).
   Любая новая колонка/таблица/индекс — ТОЛЬКО новой миграцией в конец массива (миграции выполняются и на новых базах). Для колонок используй хелпер `addColumn(d, table, col, def)`. Старые миграции не редактируй.
   SQLite `LIKE` не понимает регистр кириллицы — для поиска используй функцию `ulower()`.
-- `server/src/routes.js` — весь REST API под `/api`. Хелперы: `wrap` (ошибки → JSON), `pick(body, FIELDS)` (белый список полей — новые поля добавляй в соответствующий `*_FIELDS`), `insert/update`, `logActivity`. Права: `requireRole('admin','manager')`.
+- `server/src/routes.js` — собирает REST API под `/api` из модулей `server/src/routes/*.js` по темам (auth, clients, tasks, tickets, companies, deals, invoices, admin, documents, infra, portal, import, reports, time, dashboard) и содержит обработчик ошибок. Общие хелперы — `routes/shared.js`; расчёт сумм — `src/calc.js`. Новые маршруты добавляй в модуль своей темы. Хелперы: `wrap` (ошибки → JSON), `pick(body, FIELDS)` (белый список полей — новые поля добавляй в соответствующий `*_FIELDS`), `insert/update`, `logActivity`. Права: `requireRole('admin','manager')`.
 - `server/src/auth.js` — сессии, роли `admin | manager | member`; клиенты из личного кабинета — отдельная таблица `portal_users` (токен с `pid`), им доступны только `/api/portal/*`. Шифрование секретов базы знаний — `encryptSecret/decryptSecret`.
 - `server/src/audit.js` — история изменений (пишется автоматически в `update()` для таблиц из `TRACKED`) и корзина: удаляй через `trashDelete(entity, table, id, title)` — снимок со всеми зависимыми строками, восстановление из «Настройки → Корзина».
 - `server/src/recurrence.js` — расчёт дат повторения (задачи, счета); планировщик — `tick()` в `index.js` (каждые 10 минут).
@@ -49,6 +49,13 @@ cd server && DATA_DIR=./dev-data npm run seed -- --force        # пересоз
 - `client/src/components/ui.jsx` — UI-кит (Button, Modal, Drawer, Popover, Select, Field, StatusDot, Progress, AvatarStack, Stat…). Новые экраны собирай из него.
 - `client/src/pages/*` — страницы. Маршруты — `client/src/App.jsx`, меню — `NAV` в `components/Layout.jsx`.
   Разделы-хабы (`components/Hub.jsx`): «Финансы» `/finance/:tab` (счета, доходы и расходы, отчёты), «ИТ-инфраструктура» `/infra/:tab` (оборудование, база знаний), «Настройки» `/settings/:tab` (профиль, команда, компании, шаблоны, каталог, интеграции, корзина). Календарь, учёт времени и повторяющиеся задачи/счета — вкладки «Проектов» (`/projects?view=…`). Старые адреса (`/invoices`, `/kb`, `/time`…) перенаправляются в `App.jsx` — не дублируй одну информацию в нескольких разделах.
+
+## Тесты, CI, мониторинг
+- `cd server && npm test` — автотесты (`server/test/*.test.js`, встроенный `node:test`): НДС и суммы, сумма прописью, повторения, УПД XML, интеграционный тест API на пустой временной базе. Меняешь расчёты, документы или даты — добавь/поправь тест.
+- GitHub Actions (`.github/workflows/ci.yml`) на каждый push: тесты сервера + сборка клиента.
+- `scripts/monitor.sh` — для cron на сервере (раз в 5 минут): проверяет `/api/health` и свободное место, при смене состояния шлёт в Telegram (`TG_TOKEN`, `TG_CHAT` в `/opt/crm/.monitor.env`). Описание — в шапке скрипта.
+- Фронтенд: страницы подгружаются лениво (`lazy` в `App.jsx`), PWA — `client/public/manifest.webmanifest` и `sw.js` (API не кэшируется).
+- Упоминания `@Имя` в комментариях задач/заявок → таблица `notifications` (колокольчик), шаблоны задач — `task_templates` («Настройки → Шаблоны задач»).
 
 ## Стиль
 - Дизайн: светлый, белые карточки `rounded-2xl border-line`, кнопки-«пилюли» (`.chip`), акцент — зелёный `brand` (главные действия) и фиолетовый `violet` (таймер, фокус). Токены цветов — в `client/src/index.css` (`@theme`).

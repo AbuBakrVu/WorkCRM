@@ -2,6 +2,7 @@ import { all, get, run, tx, logActivity } from '../db.js';
 import { todayMsk } from '../recurrence.js';
 import { trashDelete } from '../audit.js';
 import { requireRole } from '../auth.js';
+import { calcItems } from '../calc.js';
 import { api, bad, notFound, wrap, pick, insert, update, idParam, required } from './shared.js';
 import { checkVat } from './companies.js';
 
@@ -13,20 +14,6 @@ const DEAL_SELECT = `SELECT d.*, c.name client_name, u.name owner_name, u.color 
   FROM deals d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN users u ON u.id = d.owner_id LEFT JOIN companies co ON co.id = d.company_id`;
 
 // Суммы по позициям: НДС сверху (above) или в т.ч. (included). Округляем до копеек построчно.
-const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
-export function calcItems(items, mode = 'above') {
-  let net = 0, vat = 0, total = 0;
-  const rows = items.map((it) => {
-    const rate = it.vat_rate && it.vat_rate !== 'none' ? Number(it.vat_rate) : 0;
-    const base = r2(it.qty * it.price);
-    let lineVat, lineTotal, lineNet;
-    if (mode === 'included') { lineTotal = base; lineVat = r2((base * rate) / (100 + rate)); lineNet = r2(base - lineVat); }
-    else { lineNet = base; lineVat = r2((base * rate) / 100); lineTotal = r2(base + lineVat); }
-    net += lineNet; vat += lineVat; total += lineTotal;
-    return { ...it, net: lineNet, vat: lineVat, total: lineTotal };
-  });
-  return { rows, net: r2(net), vat: r2(vat), total: r2(total) };
-}
 const dealItems = (id) => all('SELECT * FROM deal_items WHERE deal_id = ? ORDER BY position, id', id);
 export function getDeal(id) {
   const d = get(`${DEAL_SELECT} WHERE d.id = ?`, id);

@@ -8,7 +8,7 @@ import { renderDocx, docxToPdf, templateTags, buildUpd, paymentQr } from '../doc
 import { requireRole } from '../auth.js';
 import { api, bad, notFound, wrap, pick, insert, update, idParam } from './shared.js';
 import { wrapAsync } from './companies.js';
-import { calcItems } from './deals.js';
+import { calcItems } from '../calc.js';
 import { commitDocNumber, isDate, peekDocNumber } from './invoices.js';
 
 /* ---------- шаблоны документов и формирование документов ---------- */

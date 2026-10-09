@@ -4,7 +4,8 @@ import { trashDelete } from '../audit.js';
 import { requireRole } from '../auth.js';
 import { api, bad, notFound, wrap, pick, insert, update, idParam } from './shared.js';
 import { checkVat } from './companies.js';
-import { calcItems, getDeal } from './deals.js';
+import { calcItems } from '../calc.js';
+import { getDeal } from './deals.js';
 
 /* ---------- нумерация документов: по компании, виду и году ---------- */
 export function nextDocNumber(companyId, kind, date) {

@@ -4,6 +4,7 @@
   "description": "",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
     "dev": "node --watch --disable-warning=ExperimentalWarning src/index.js",
     "seed": "node --disable-warning=ExperimentalWarning src/seed.js",
     "backup": "node --disable-warning=ExperimentalWarning src/backup.js",

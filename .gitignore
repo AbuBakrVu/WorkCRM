@@ -5,3 +5,4 @@ data/
 .env
 dev-data/
 server/dev-data/
+.monitor.env
