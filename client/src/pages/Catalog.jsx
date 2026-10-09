@@ -5,7 +5,7 @@ import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { VAT_RATES, UNITS } from '../lib/constants';
 import { fmtRub } from '../lib/format';
-import { Button, Card, Empty, Spinner, Modal, Field, Select, ConfirmButton, PageHeader, Segmented, Pill, cx } from '../components/ui';
+import { Button, Card, Empty, Spinner, Modal, Field, Select, ConfirmButton, PageHeader, Segmented, cx } from '../components/ui';
 
 export const KIND = { service: 'Услуга', goods: 'Товар' };
 

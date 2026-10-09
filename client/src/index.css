@@ -5,7 +5,6 @@
   /* Тёплая светлая база и «лесной» зелёный акцент */
   --color-canvas: #edf0ee;
   --color-panel: #fafbf9;
-  --color-side: #f3f5f3;
   --color-line: #e3e8e4;
   --color-line-strong: #d5dcd7;
   --color-ink: #17201b;
@@ -16,7 +15,6 @@
   --color-brand-ink: #ffffff;
   --color-violet: #155c3b;
   --color-forest: #0e2f20;
-  --color-forest-2: #133d29;
   --color-mint: #5fb383;
   --color-st-done: #4fae6f;
   --color-st-progress: #e8b04b;
@@ -32,7 +30,6 @@ html.dark {
   color-scheme: dark;
   --color-canvas: #0f1013;
   --color-panel: #17191d;
-  --color-side: #141619;
   --color-line: #25282e;
   --color-line-strong: #30343b;
   --color-ink: #e8eaed;
@@ -181,7 +178,6 @@ select.input { @apply pr-8 appearance-none bg-no-repeat;
 .sb:hover .sb-fade, .sb.sb-open .sb-fade { opacity: 1; transition: opacity .25s .1s; }
 
 .sb-profile { display: flex; align-items: center; gap: 12px; min-height: 44px; flex-shrink: 0; border-radius: 12px; }
-.sb-profile .sb-chev { color: var(--color-ink-3); transition: opacity .15s, transform .2s; }
 
 .sb-search { position: relative; flex: 0 0 44px; width: 44px; height: 44px; border: 1px solid var(--color-line); border-radius: 12px;
   transition: width .35s var(--ease-out), border-color .2s; cursor: pointer; background: var(--color-panel); }

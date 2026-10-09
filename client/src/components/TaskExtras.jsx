@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { ListChecks, GitBranch, Link2, Plus, X, Check, GripVertical, Trash2, Lock } from 'lucide-react';
+import { ListChecks, GitBranch, Link2, Plus, X, Check, GripVertical, Lock } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';

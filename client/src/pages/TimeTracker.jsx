@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, Play, Square, Trash2, Download, Timer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Download, Timer } from 'lucide-react';
 import { useApp, useLoad, useNow } from '../lib/store';
 import { api } from '../lib/api';
-import { fmtHM, fmtHMS, fmtTime, fmtDate, toDateStr, parseDate, fmtHours } from '../lib/format';
-import { Button, Card, Modal, Field, Select, Avatar, Popover, MenuItem, Empty, PageHeader, Stat, cx, userOptions, nameOptions, SearchList } from '../components/ui';
+import { fmtHM, fmtTime, fmtDate, toDateStr, parseDate, fmtHours } from '../lib/format';
+import { Button, Card, Modal, Field, Select, Avatar, Popover, Empty, PageHeader, Stat, cx, userOptions, nameOptions, SearchList } from '../components/ui';
 import { TimerStartModal } from '../components/TimerStart';
 import { TimerCard } from '../components/TimerCard';
 
@@ -12,7 +12,7 @@ const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const monday = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
 
 export default function TimeTracker({ embedded = false, openAdd = false, onAddOpened }) {
-  const { user, users, isManager, timer, stopTimer, toast, bump } = useApp();
+  const { user, users, isManager, toast, bump } = useApp();
   const [params, setParams] = useSearchParams();
   const [week, setWeek] = useState(() => monday(new Date()));
   const [who, setWho] = useState(isManager ? null : user.id);

@@ -8,11 +8,6 @@ const daysInMonth = (y, m) => new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
 const isoDow = (d) => ((d.getUTCDay() + 6) % 7) + 1;
 const weekIndex = (d) => Math.floor((d.getTime() / 864e5 + 3) / 7); // недели с понедельника
 
-// «Сегодня» по Москве — сервер живёт в UTC, а работа идёт по МСК
-export function todayMsk() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }).format(new Date());
-}
-
 // Первая подходящая дата >= from (если inclusive) или > from
 export function nextDate(rule, from, inclusive = false, anchor = from) {
   const every = Math.max(1, Number(rule.every) || 1);

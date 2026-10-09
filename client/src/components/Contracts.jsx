@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, ChevronLeft, ChevronRight, Clock, Pencil, FileClock, Printer } from 'lucide-react';
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
-import { fmtRub, fmtDate, fmtHM, plural } from '../lib/format';
+import { fmtRub, fmtDate, fmtHM} from '../lib/format';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, cx, nameOptions } from './ui';
 
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];

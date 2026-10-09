@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored, timerSeconds } from '../lib/store';
 import { api } from '../lib/api';
-import { Avatar, IconButton, Popover, MenuItem, Odometer, cx } from './ui';
+import { Avatar, IconButton, Popover, Odometer, cx } from './ui';
 import { fmtHMS, timeAgo } from '../lib/format';
 import { TimerStartModal } from './TimerStart';
 import { WorkReportModal } from './WorkReport';

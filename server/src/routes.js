@@ -1939,29 +1939,17 @@ api.use('/transactions', finance);
 /* ---------- dashboard ---------- */
 api.get('/dashboard', wrap((req) => {
   const canFinance = ['admin', 'manager'].includes(req.user.role);
-  const monthStart = new Date(); monthStart.setDate(1);
   return {
-    projects: get(`SELECT COUNT(*) total,
-        SUM(status IN ('planned','in_progress','in_review')) active,
-        SUM(status = 'stuck') stuck,
-        SUM(status != 'done' AND due_date < date('now')) overdue FROM projects`),
     tickets: get(`SELECT SUM(status IN ('new','in_progress','waiting')) open,
         SUM(status = 'new') new,
-        SUM(status IN ('new','in_progress','waiting') AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')) overdue,
-        SUM(resolved_at >= date('now','-6 days')) resolved_week FROM tickets`),
+        SUM(status IN ('new','in_progress','waiting') AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')) overdue FROM tickets`),
     tasks: get(`SELECT
         SUM(status != 'done') open,
         SUM(status = 'in_progress') in_progress,
         SUM(status != 'done' AND due_date < date('now')) overdue,
         SUM(status != 'done' AND due_date BETWEEN date('now') AND date('now','+3 days')) due_soon,
-        SUM(status != 'done' AND assignee_id IS NULL) unassigned,
-        SUM(created_at >= date('now','-6 days')) created_week,
-        SUM(status = 'done' AND completed_at >= date('now','-6 days')) done_week
+        SUM(status != 'done' AND assignee_id IS NULL) unassigned
       FROM tasks`),
-    tasks_done_by_day: all(`SELECT date(completed_at) day, COUNT(*) n FROM tasks
-        WHERE status = 'done' AND completed_at >= date('now','-13 days') GROUP BY day`),
-    tasks_created_by_day: all(`SELECT date(created_at) day, COUNT(*) n FROM tasks
-        WHERE created_at >= date('now','-13 days') GROUP BY day`),
     projects_overview: all(`SELECT p.id, p.name, p.status,
         SUM(t.status = 'todo') todo, SUM(t.status = 'in_progress') in_progress,
         SUM(t.status != 'done' AND t.due_date < date('now')) overdue,
@@ -1972,29 +1960,11 @@ api.get('/dashboard', wrap((req) => {
       GROUP BY p.id ORDER BY overdue DESC, (todo + in_progress) DESC, p.name`),
     attention_tasks: all(`${TASK_SELECT} WHERE t.status != 'done' AND (t.due_date <= date('now','+3 days') OR t.assignee_id IS NULL)
         ORDER BY t.due_date IS NULL, t.due_date, t.id LIMIT 10`),
-    tickets_by_category: all(`SELECT category, COUNT(*) n FROM tickets WHERE created_at >= date('now','-29 days') GROUP BY category ORDER BY n DESC`),
-    hours_week: all(`SELECT u.id, u.name, u.color, COALESCE(SUM(e.duration_sec),0) sec FROM users u
-        LEFT JOIN time_entries e ON e.user_id = u.id AND e.started_at >= date('now','-6 days')
-        WHERE u.active = 1 GROUP BY u.id ORDER BY sec DESC`),
-    hours_by_day: all(`SELECT date(started_at) day, SUM(duration_sec) sec FROM time_entries
-        WHERE started_at >= date('now','-13 days') GROUP BY day ORDER BY day`),
-    pipeline: all(`SELECT stage, COUNT(*) n, COALESCE(SUM(amount),0) amount FROM deals GROUP BY stage`),
+    my_week_sec: get(`SELECT COALESCE(SUM(duration_sec),0) sec FROM time_entries WHERE user_id = ? AND started_at >= date('now','-6 days')`, req.user.id).sec,
     invoices: canFinance ? get(`SELECT COUNT(*) unpaid, COALESCE(SUM(total - paid),0) unpaid_sum,
         COALESCE(SUM(due_date IS NOT NULL AND due_date < @d),0) overdue,
         COALESCE(SUM(CASE WHEN due_date IS NOT NULL AND due_date < @d THEN total - paid END),0) overdue_sum
       FROM invoices WHERE cancelled = 0 AND paid < total - 0.005`, { d: todayMsk() }) : null,
-    finance: canFinance ? {
-      month: get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) income,
-                         COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) expense
-                  FROM transactions WHERE date >= date('now','start of month')`),
-      prev: get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) income,
-                        COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) expense
-                 FROM transactions WHERE date >= date('now','start of month','-1 month') AND date < date('now','start of month')`),
-      months: all(`SELECT strftime('%Y-%m', date) month,
-          SUM(CASE WHEN type='income' THEN amount ELSE 0 END) income,
-          SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) expense
-        FROM transactions WHERE date >= date('now','start of month','-5 months') GROUP BY month ORDER BY month`),
-    } : null,
     my_tasks: all(`${TASK_SELECT} WHERE t.status != 'done' AND (t.assignee_id = ? OR EXISTS (SELECT 1 FROM task_members m WHERE m.task_id = t.id AND m.user_id = ? AND m.role = 'coassignee'))
       ORDER BY t.due_date IS NULL, t.due_date LIMIT 8`, req.user.id, req.user.id),
     urgent_tickets: all(`${TICKET_SELECT} WHERE k.status IN ('new','in_progress','waiting')
@@ -2003,9 +1973,6 @@ api.get('/dashboard', wrap((req) => {
         ORDER BY a.created_at DESC, a.id DESC LIMIT 12`),
   };
 }));
-
-api.get('/activity', wrap(() => all(`SELECT a.*, u.name user_name, u.color user_color FROM activity a LEFT JOIN users u ON u.id = a.user_id
-  ORDER BY a.created_at DESC, a.id DESC LIMIT 100`)));
 
 /* ---------- global search ---------- */
 api.get('/search', wrap((req) => {

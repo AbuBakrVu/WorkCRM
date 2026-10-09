@@ -10,7 +10,6 @@ export function parseDate(v) {
 
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 export const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-export const MONTHS_GEN_SHORT = MONTHS_SHORT;
 
 export function fmtDate(v, withYear = false) {
   const d = parseDate(v);

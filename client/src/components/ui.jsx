@@ -48,19 +48,6 @@ export function Pill({ color, bg, children, className }) {
   return <span className={cx('pill inline-flex items-center h-6 px-2 rounded-md text-[12px] font-medium', className)} style={{ '--pc': color, '--pb': bg }}>{children}</span>;
 }
 
-export function Progress({ value = 0, color, showLabel = true, width = 'w-14' }) {
-  const v = Math.max(0, Math.min(100, value));
-  const c = color || (v >= 100 ? 'var(--color-st-done)' : v >= 50 ? 'var(--color-st-progress)' : v >= 25 ? 'var(--color-st-stuck)' : 'var(--color-st-review)');
-  return (
-    <div className="flex items-center gap-3">
-      <div className={cx('h-1.5 rounded-full bg-line overflow-hidden', width)}>
-        <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, background: c }} />
-      </div>
-      {showLabel && <span className="text-[12.5px] text-ink-2 tabular w-9 text-right">{v}%</span>}
-    </div>
-  );
-}
-
 export function Avatar({ user, size = 26, ring = true, className, style }) {
   if (!user) return <span className={cx('inline-flex items-center justify-center rounded-full bg-line text-ink-3 text-[10px]', className)} style={{ width: size, height: size }}>—</span>;
   return (

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2, Circle, CircleDot, Play, Pencil, Calendar, Clock, FolderOpen, Send, Trash2, MessageSquare, Paperclip, FileText,
-  Download, Square, MoreHorizontal, Plus, X, Users, RotateCcw, Pause, PauseCircle, Lock, Timer, ChevronDown, Repeat,
+  Download, MoreHorizontal, Plus, X, Users, RotateCcw, PauseCircle, Lock, ChevronDown, Repeat,
 } from 'lucide-react';
 import { useApp, useNow, timerSeconds } from '../lib/store';
 import { taskPerms } from '../lib/perms';
@@ -14,23 +14,6 @@ import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinne
 import { HistoryPanel } from './History';
 
 export const isOverdue = (t) => t.status !== 'done' && t.due_date && t.due_date < todayStr();
-
-// Иконка статуса задачи: клик переключает «открыта → в работе → закрыта → открыта»
-const NEXT = { todo: 'in_progress', in_progress: 'done', done: 'todo' };
-export function TaskStatusButton({ task, onChange, size = 18 }) {
-  const { user } = useApp();
-  const Icon = task.status === 'done' ? CheckCircle2 : task.status === 'in_progress' ? CircleDot : Circle;
-  if (!taskPerms(user, task).status) {
-    return <span className="shrink-0" title={`${TASK_STATUS[task.status].label} — менять статус могут исполнитель, постановщик или администратор`}>
-      <Icon size={size} className={task.status === 'done' ? 'text-emerald-500/60' : task.status === 'in_progress' ? 'text-amber-500/60' : 'text-ink-3/50'} /></span>;
-  }
-  return (
-    <button type="button" onClick={(e) => { e.stopPropagation(); onChange(NEXT[task.status]); }}
-      title={`${TASK_STATUS[task.status].label} → ${TASK_STATUS[NEXT[task.status]].label}`} className="shrink-0">
-      <Icon size={size} className={task.status === 'done' ? 'text-emerald-500' : task.status === 'in_progress' ? 'text-amber-500' : 'text-ink-3 hover:text-ink-2'} />
-    </button>
-  );
-}
 
 export function TaskStatusPill({ status }) {
   const s = TASK_STATUS[status];

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle2, Handshake, Repeat, User, Users } from 'lucide-react';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
-import { TASK_STATUS, DEAL_STAGE } from '../lib/constants';
+import { TASK_STATUS} from '../lib/constants';
 import { todayStr, toDateStr, fmtDate } from '../lib/format';
 import { taskPerms } from '../lib/perms';
 import { PageHeader, Segmented, Spinner, Card, cx } from '../components/ui';

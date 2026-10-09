@@ -218,7 +218,7 @@ export default function Projects() {
                   onStar={() => setStarred((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))}
                   onAddTask={() => setTaskForm({ projectId: p.id })} onEdit={() => setProjectForm(p)}
                   onTimer={() => startTimer({ project_id: p.id })}
-                  onOpenTask={setTaskId} onPatchTask={patchTask} />
+                  onOpenTask={setTaskId} />
               ))}
             </div>
           )
@@ -248,7 +248,7 @@ export default function Projects() {
   );
 }
 
-function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, onStar, onAddTask, onEdit, onTimer, onOpenTask, onPatchTask }) {
+function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, onStar, onAddTask, onEdit, onTimer, onOpenTask }) {
   const members = p.member_ids.map((id) => userMap[id]).filter(Boolean);
   const progress = c.total ? Math.round((c.done / c.total) * 100) : 0;
   const initial = p.name.replace(/[«»"]/g, '').replace(/^(ООО|АО|ИП|ПАО|ГБУ|ГУП|ФГБОУ)\s+/i, '').trim()[0] || '?';

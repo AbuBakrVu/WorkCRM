@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { Plus, TrendingUp, TrendingDown, Wallet, Trash2, Download, Receipt } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Trash2, Download, Receipt } from 'lucide-react';
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate, MONTHS, toDateStr } from '../lib/format';
 import { Button, Card, Modal, Field, Select, Stat, PageHeader, Empty, Spinner, cx, nameOptions } from '../components/ui';
-import { ChartTip, Legend, C_INCOME, C_EXPENSE } from './Dashboard';
+import { ChartTip, Legend, C_INCOME, C_EXPENSE } from '../components/charts';
 
 const PERIODS = { month: 'Этот месяц', prev: 'Прошлый месяц', quarter: '3 месяца', year: '12 месяцев' };
 function periodRange(p) {

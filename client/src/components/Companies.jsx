@@ -55,7 +55,7 @@ function CompanyModal({ company, onClose, onSaved, onDone }) {
   useEffect(() => { if (company) setF({ vat_rate: '22', ...company }); }, [company]);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e }));
   const body = () => {
-    const { id, created_at, logo_file_id, sign_file_id, stamp_file_id, ...rest } = f; // eslint-disable-line no-unused-vars
+    const { id, created_at, logo_file_id, sign_file_id, stamp_file_id, ...rest } = f;
     return { ...rest, is_default: !!f.is_default };
   };
   const submit = async (e) => {

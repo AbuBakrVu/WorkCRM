@@ -3,7 +3,7 @@ import { Plus, Ticket, Receipt, Monitor, FileText, LogOut, Send, ChevronLeft, Ch
 import { useApp, useLoad, useStored } from '../lib/store';
 import { api, fileUrl } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, INVOICE_STATUS } from '../lib/constants';
-import { fmtRub, fmtDate, fmtDateTime, timeAgo, plural } from '../lib/format';
+import { fmtRub, fmtDate, fmtDateTime, timeAgo} from '../lib/format';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, Tabs, cx } from '../components/ui';
 import { ASSET_TYPES, ASSET_STATUS } from './Assets';
 

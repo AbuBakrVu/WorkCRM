@@ -9,7 +9,7 @@ import { fmtMoney, fmtMoneyShort, fmtDate, parseDate, plural } from '../lib/form
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 import { Button, Avatar, PageHeader, Stat, Spinner, Card, Modal, Field, cx } from '../components/ui';
 import { DealModal } from '../components/DealModal';
-import { ChartTip, C_INCOME, C_EXPENSE } from './Dashboard';
+import { ChartTip, C_INCOME, C_EXPENSE } from '../components/charts';
 
 export default function Pipeline() {
   const { data, setData } = useLoad('/deals');
