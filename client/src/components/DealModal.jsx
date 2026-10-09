@@ -9,6 +9,7 @@ import { ItemsEditor, badItem, itemsBody } from './ItemsEditor';
 export { calcItems } from './ItemsEditor';
 import { Button, Modal, Field, Select, ConfirmButton, Spinner, StatusDot, userOptions, nameOptions } from './ui';
 import { HistoryPanel } from './History';
+import { DocumentsPanel } from './Documents';
 
 export function DealModal({ deal, onClose }) {
   const { users, clients, toast, bump, isManager } = useApp();
@@ -108,6 +109,7 @@ export function DealModal({ deal, onClose }) {
           )}
 
           <Field label="Заметки"><textarea className="input" rows={3} value={f.notes || ''} onChange={set('notes')} /></Field>
+          {f.id && isManager && <DocumentsPanel source={{ deal_id: f.id }} kinds={['offer']} companyId={f.company_id} title="Коммерческие предложения" />}
           {f.id && <HistoryPanel entity="deal" id={f.id} />}
         </div>
       )}

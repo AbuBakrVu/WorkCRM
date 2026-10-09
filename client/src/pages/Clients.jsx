@@ -94,7 +94,7 @@ function ClientFormModal({ client, onClose, onSaved }) {
     e?.preventDefault();
     if (!f.name?.trim()) return toast('Укажите название', 'error');
     const body = Object.fromEntries(['name', 'type', 'contact_name', 'phone', 'email', 'inn', 'address', 'notes', 'full_name', 'kpp', 'ogrn',
-      'bank_name', 'bik', 'account', 'corr_account', 'director_name', 'director_title'].map((k) => [k, f[k] ?? null]));
+      'bank_name', 'bik', 'account', 'corr_account', 'director_name', 'director_title', 'edo_id'].map((k) => [k, f[k] ?? null]));
     try {
       const c = f.id ? await api.put(`/clients/${f.id}`, body) : await api.post('/clients', body);
       toast('Сохранено'); bump(); onSaved?.(c); onClose();

@@ -16,7 +16,10 @@
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3"
+    "iconv-lite": "0.7.3",
+    "jsonwebtoken": "^9.0.3",
+    "jszip": "3.10.2",
+    "qrcode": "1.5.4"
   },
   "type": "module",
   "engines": {

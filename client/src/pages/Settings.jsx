@@ -5,6 +5,7 @@ import { ROLES, USER_COLORS } from '../lib/constants';
 import { Button, Card, Field, PageHeader, Avatar, Tabs, cx } from '../components/ui';
 import { useStored } from '../lib/store';
 import { CompaniesSettings } from '../components/Companies';
+import { TemplatesSettings } from '../components/Documents';
 import { TrashSettings, AuthLogSettings, shortUA } from '../components/Trash';
 import { fmtDateTime } from '../lib/format';
 import { useLoad } from '../lib/store';
@@ -26,14 +27,15 @@ export default function Settings() {
   };
 
   return (
-    <div className="max-w-[820px]">
+    <div className="max-w-[900px]">
       <PageHeader title="Настройки" subtitle="Профиль, безопасность и реквизиты компаний" />
       {isManager && (
         <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Профиль' }, { value: 'companies', label: 'Мои компании' },
+          { value: 'templates', label: 'Шаблоны документов' },
           { value: 'trash', label: 'Корзина' },
           ...(user.role === 'admin' ? [{ value: 'integrations', label: 'Интеграции' }, { value: 'security', label: 'Журнал входов' }] : [])]} /></div>
       )}
-      {isManager && tab === 'companies' ? <CompaniesSettings /> : isManager && tab === 'trash' ? <TrashSettings />
+      {isManager && tab === 'companies' ? <CompaniesSettings /> : isManager && tab === 'trash' ? <TrashSettings /> : isManager && tab === 'templates' ? <TemplatesSettings />
         : user.role === 'admin' && tab === 'integrations' ? <Integrations /> : user.role === 'admin' && tab === 'security' ? <AuthLogSettings /> : (<>
       <Card className="p-6">
         <div className="flex items-center gap-4 mb-5">

@@ -8,6 +8,7 @@ import { fmtRub, fmtMoneyShort, fmtDate, todayStr, toDateStr, plural } from '../
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, Stat, Tabs, StatusDot, cx, nameOptions } from '../components/ui';
 import { ItemsEditor, badItem, itemsBody, itemsFromServer } from '../components/ItemsEditor';
 import { HistoryPanel } from '../components/History';
+import { DocumentsPanel } from '../components/Documents';
 
 const addDays = (s, n) => { const d = new Date(s); d.setDate(d.getDate() + n); return toDateStr(d); };
 const TABS = { all: 'Все', unpaid: 'Ждут оплаты', overdue: 'Просроченные', paid: 'Оплаченные', cancelled: 'Отменённые' };
@@ -174,6 +175,7 @@ export function InvoiceDrawer({ id, onClose, onEdit, onChanged }) {
               </div>
             )}
           </div>
+          {isManager && !inv.cancelled && <DocumentsPanel source={{ invoice_id: inv.id }} kinds={['invoice', 'act', 'upd']} companyId={inv.company_id} period={inv.period} />}
           {inv.notes && <p className="text-[13px] text-ink-2 bg-canvas rounded-xl p-3 whitespace-pre-wrap">{inv.notes}</p>}
           <HistoryPanel entity="invoice" id={inv.id} />
           {isManager && (
@@ -220,7 +222,7 @@ export function InvoiceModal({ invoice, onClose, onSaved }) {
     if (!items.length) return toast('Добавьте позиции', 'error');
     const bad = badItem(items); if (bad) return toast(bad, 'error');
     const body = { number: f.number || null, company_id: f.company_id ? +f.company_id : null, client_id: +f.client_id, deal_id: f.deal_id ? +f.deal_id : null,
-      date: f.date, due_date: f.due_date || null, vat_mode: f.vat_mode, title: f.title || null, notes: f.notes || null, items: itemsBody(items) };
+      date: f.date, due_date: f.due_date || null, vat_mode: f.vat_mode, title: f.title || null, notes: f.notes || null, period: f.period || null, items: itemsBody(items) };
     try {
       const inv = f.id ? await api.put(`/invoices/${f.id}`, body) : await api.post('/invoices', body);
       toast(f.id ? 'Счёт сохранён' : `Счёт № ${inv.number} выставлен`); bump(); onSaved?.(inv); onClose();
@@ -237,7 +239,8 @@ export function InvoiceModal({ invoice, onClose, onSaved }) {
           <Field label="Дата"><input type="date" className="input" value={f.date || ''} onChange={set('date')} /></Field>
           <Field label="Оплатить до"><input type="date" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>
           <Field label="Сделка"><Select value={f.deal_id} onChange={pickDeal} placeholder="—" search options={deals.filter((d) => !f.client_id || !d.client_id || String(d.client_id) === String(f.client_id)).map((d) => ({ value: d.id, label: d.title, hint: d.client_name }))} /></Field>
-          <Field label="Назначение (необязательно)" className="col-span-2 md:col-span-4"><input className="input" value={f.title || ''} onChange={set('title')} placeholder="Например: Оплата за монтаж СКС по договору № 12" /></Field>
+          <Field label="Период (для шаблонов «за период»)" className="col-span-2"><input className="input" value={f.period || ''} onChange={set('period')} placeholder="октябрь 2026" /></Field>
+          <Field label="Назначение (необязательно)" className="col-span-2"><input className="input" value={f.title || ''} onChange={set('title')} placeholder="Например: Оплата за монтаж СКС по договору № 12" /></Field>
         </div>
         <ItemsEditor items={items} setItems={setItems} vatMode={f.vat_mode} setVatMode={set('vat_mode')} defVat={company?.vat_rate || '22'} catalog={catalog} />
         <Field label="Комментарий (виден только в CRM)"><textarea className="input" rows={2} value={f.notes || ''} onChange={set('notes')} /></Field>

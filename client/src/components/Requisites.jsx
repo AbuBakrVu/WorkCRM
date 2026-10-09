@@ -57,7 +57,8 @@ export function RequisitesFields({ f, set, open: initOpen = true, title = 'Ре�
           <Field label="Банк" className="col-span-2">{inp('bank_name', { placeholder: 'ПАО Сбербанк' })}</Field>
           <Field label="БИК" hint="Банк и корр. счёт подставятся сами">{inp('bik', { inputMode: 'numeric', maxLength: 9, onBlur: (e) => bankLookup(e.target.value) })}</Field>
           <Field label="Корр. счёт">{inp('corr_account', { inputMode: 'numeric', maxLength: 20 })}</Field>
-          <Field label="Расчётный счёт" className="col-span-2">{inp('account', { inputMode: 'numeric', maxLength: 20 })}</Field>
+          <Field label="Расчётный счёт">{inp('account', { inputMode: 'numeric', maxLength: 20 })}</Field>
+          <Field label="ID участника ЭДО" hint="Для УПД: 2BM-…, 2AE-… — есть в Диадоке/СБИС">{inp('edo_id', { placeholder: '2BM-…' })}</Field>
         </div>
       )}
     </div>

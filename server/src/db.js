@@ -499,6 +499,43 @@ const MIGRATIONS = [
     addColumn(d, 'ticket_comments', 'portal_user_id', 'INTEGER REFERENCES portal_users(id) ON DELETE SET NULL');
     addColumn(d, 'ticket_comments', 'internal', 'INTEGER NOT NULL DEFAULT 0');
   },
+  // 17. Документы по шаблонам: КП, счёт, акт (Word/PDF) и УПД (XML)
+  (d) => {
+    d.exec(`CREATE TABLE IF NOT EXISTS doc_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL CHECK (kind IN ('offer','invoice','act')),
+      name TEXT NOT NULL,
+      company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+      file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      tags TEXT,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      number TEXT NOT NULL,
+      date TEXT NOT NULL,
+      deal_id INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+      template_id INTEGER REFERENCES doc_templates(id) ON DELETE SET NULL,
+      docx_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+      pdf_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+      xml_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+      with_stamp INTEGER NOT NULL DEFAULT 0,
+      total REAL,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_documents_invoice ON documents(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_deal ON documents(deal_id);`);
+    addColumn(d, 'invoices', 'period', 'TEXT');
+    addColumn(d, 'companies', 'edo_id', 'TEXT');
+    addColumn(d, 'clients', 'edo_id', 'TEXT');
+  },
 ];
 
 {
