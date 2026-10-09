@@ -184,7 +184,7 @@ export function SearchList({ items, value, onPick, multi, search = true, placeho
 }
 
 // Выпадающая панель в портале под элементом (не обрезается модалками и таблицами)
-function useFloating(open, anchorRef, panelRef, onClose, minWidth = 220) {
+function useFloating(open, anchorRef, panelRef, onClose, minWidth = 220, { width: fixedWidth, align = 'left' } = {}) {
   const [pos, setPos] = useState(null);
   useLayoutEffect(() => {
     if (!open) return;
@@ -194,8 +194,8 @@ function useFloating(open, anchorRef, panelRef, onClose, minWidth = 220) {
       const h = panelRef.current?.offsetHeight || 320;
       const below = window.innerHeight - r.bottom;
       const up = below < h + 12 && r.top > below;
-      const width = Math.max(r.width, minWidth);
-      const left = Math.min(r.left, window.innerWidth - width - 8);
+      const width = fixedWidth || Math.max(r.width, minWidth);
+      const left = Math.max(8, Math.min(align === 'right' ? r.right - width : r.left, window.innerWidth - width - 8));
       setPos(up ? { left, width, bottom: window.innerHeight - r.top + 6 } : { left, width, top: r.bottom + 6 });
     };
     place();
@@ -203,7 +203,7 @@ function useFloating(open, anchorRef, panelRef, onClose, minWidth = 220) {
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
-  }, [open, anchorRef, panelRef, minWidth]);
+  }, [open, anchorRef, panelRef, minWidth, fixedWidth, align]);
   useEffect(() => {
     if (!open) return;
     const h = (e) => { if (!anchorRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) onClose(); };
@@ -255,23 +255,21 @@ export const userOptions = (users, { all = false } = {}) => users.filter((u) => 
 export const nameOptions = (list) => list.map((x) => ({ value: x.id, label: x.name }));
 
 // Выпадающее меню / поповер, привязанный к кнопке
+// Меню по кнопке. Рисуется в портале поверх всего — не прячется за соседними карточками и не обрезается.
 export function Popover({ trigger, children, align = 'left', width = 220 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
+  const panelRef = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  const pos = useFloating(open, ref, panelRef, close, width, { width, align });
   return (
     <div className="relative" ref={ref}>
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
-      {open && (
-        <div className={cx('absolute z-30 mt-2 bg-panel border border-line rounded-xl shadow-xl p-1.5 anim-pop', align === 'right' ? 'right-0' : 'left-0')} style={{ width }}>
-          {typeof children === 'function' ? children({ close: () => setOpen(false) }) : children}
-        </div>
-      )}
+      {open && createPortal(
+        <div ref={panelRef} className="fixed z-[70] bg-panel border border-line rounded-xl shadow-xl p-1.5 anim-pop"
+          style={pos ? { left: pos.left, width, top: pos.top, bottom: pos.bottom } : { opacity: 0, left: 0, top: 0, width }}>
+          {typeof children === 'function' ? children({ close }) : children}
+        </div>, document.body)}
     </div>
   );
 }
