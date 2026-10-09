@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Plus, Search, Filter, User, Table2, Kanban, X, MapPin, Clock, Play, MessageSquare, AlertTriangle, Ticket as TicketIcon, Send } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored } from '../lib/store';
 import { SavedViews } from '../components/SavedViews';
 import { HistoryPanel } from '../components/History';
+import { MessageText, useMentions } from '../components/Mentions';
 import { api } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
 import { fmtDateTime, fmtHM, parseDate, timeAgo } from '../lib/format';
@@ -264,6 +265,8 @@ function TicketDrawer({ id, onClose }) {
   const { users, clients, projects, toast, bump, startTimer, isManager, version } = useApp();
   const [t, setT] = useState(null);
   const [comment, setComment] = useState('');
+  const cRef = useRef(null);
+  const mn = useMentions(users, comment, setComment, cRef);
   const [internal, setInternal] = useState(false);
   const now = useNow(30000);
   useEffect(() => { if (id) api.get(`/tickets/${id}`).then(setT).catch((e) => toast(e.message, 'error')); else setT(null); }, [id, version, toast]);
@@ -276,7 +279,8 @@ function TicketDrawer({ id, onClose }) {
     e.preventDefault();
     if (!comment.trim()) return;
     const c = await api.post(`/tickets/${id}/comments`, { body: comment, internal });
-    setT((x) => ({ ...x, comments: c })); setComment('');
+    setT((x) => ({ ...x, comments: c })); setComment(''); mn.reset();
+    if (cRef.current) cRef.current.style.height = 'auto';
   };
   const remove = async () => { await api.del(`/tickets/${id}`); toast('Заявка удалена'); bump(); onClose(); };
   return (
@@ -319,13 +323,16 @@ function TicketDrawer({ id, onClose }) {
                       {!!c.from_client && <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#0f7d84]">клиент</span>}
                       {!!c.internal && <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-amber-600">внутренний</span>}
                       {' '}<span className="text-ink-3">{timeAgo(c.created_at)}</span></div>
-                    <div className="text-[13px] text-ink-2 mt-0.5 whitespace-pre-wrap">{c.body}</div>
+                    <div className="text-[13px] text-ink-2 mt-0.5 whitespace-pre-wrap"><MessageText text={c.body} users={users} /></div>
                   </div>
                 </div>
               ))}
             </div>
-            <form onSubmit={send} className="flex items-center gap-2 mt-3">
-              <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder={internal ? 'Внутренний комментарий — клиент его не увидит' : 'Написать комментарий…'} />
+            <form onSubmit={send} className="relative flex items-end gap-2 mt-3">
+              {mn.popup('absolute bottom-full left-0 mb-2')}
+              <textarea ref={cRef} rows={1} className="input resize-none py-2 leading-5" value={comment} onChange={mn.onChange} onBlur={mn.closeSoon}
+                onKeyDown={(e) => { if (mn.onKeyDown(e)) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }}
+                placeholder={internal ? 'Внутренний комментарий — клиент его не увидит' : 'Комментарий… @ — упомянуть коллегу'} />
               <Button variant="dark" icon={Send} type="submit">Отправить</Button>
             </form>
             {t.client_id && <label className="flex items-center gap-2 mt-2 text-[12px] text-ink-2"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} className="accent-[var(--color-brand)]" />

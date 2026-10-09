@@ -381,6 +381,11 @@ api.post('/tasks', wrap((req) => {
     if (Array.isArray(req.body.checklist)) req.body.checklist.map((x) => String(x || '').trim()).filter(Boolean)
       .forEach((text, i) => insert('task_checklist', { task_id: id, position: i, text: text.slice(0, 500) }));
     if (data.parent_id) systemComment(data.parent_id, req.user.id, `добавил подзадачу «${data.title}»`);
+    // подзадачи сразу при создании (например, из шаблона)
+    if (Array.isArray(req.body.subtasks) && !data.parent_id) req.body.subtasks.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 50).forEach((title) => {
+      insert('tasks', { project_id: data.project_id, parent_id: id, title: title.slice(0, 300), assignee_id: data.assignee_id ?? null, created_by: req.user.id });
+      systemComment(id, req.user.id, `добавил подзадачу «${title.slice(0, 300)}»`);
+    });
     return id;
   });
   const pname = get('SELECT name FROM projects WHERE id = ?', data.project_id)?.name;
@@ -516,6 +521,47 @@ api.delete('/recurrences/:id', wrap((req) => {
   return { ok: true };
 }));
 
+/* ---------- шаблоны задач ---------- */
+const TTPL_FIELDS = ['name', 'title', 'description', 'assignee_id', 'due_days'];
+const TTPL_SELECT = 'SELECT t.*, u.name assignee_name FROM task_templates t LEFT JOIN users u ON u.id = t.assignee_id';
+const parseList = (v) => { try { return v ? JSON.parse(v) : []; } catch { return []; } };
+const shapeTtpl = (t) => t && ({ ...t, coassignee_ids: ids(t.coassignee_ids), observer_ids: ids(t.observer_ids), checklist: parseList(t.checklist), subtasks: parseList(t.subtasks) });
+function ttplData(req) {
+  const data = pick(req.body, TTPL_FIELDS);
+  if (data.due_days != null) data.due_days = Math.min(365, Math.max(0, Math.round(Number(data.due_days)) || 0));
+  for (const k of ['coassignee_ids', 'observer_ids']) if (Array.isArray(req.body[k])) data[k] = req.body[k].map(Number).filter(Boolean).join(',') || null;
+  for (const k of ['checklist', 'subtasks']) if (Array.isArray(req.body[k])) data[k] = JSON.stringify(req.body[k].map((x) => String(x || '').trim().slice(0, 500)).filter(Boolean).slice(0, 100));
+  return data;
+}
+const ttplPerm = (user, t) => user.role === 'admin' || user.role === 'manager' || t.created_by === user.id;
+api.get('/task-templates', wrap(() => all(`${TTPL_SELECT} ORDER BY t.name COLLATE NOCASE`).map(shapeTtpl)));
+api.post('/task-templates', wrap((req) => {
+  const data = ttplData(req);
+  required(data, 'title');
+  data.name = String(data.name || data.title).trim().slice(0, 120);
+  data.created_by = req.user.id;
+  return shapeTtpl(get(`${TTPL_SELECT} WHERE t.id = ?`, insert('task_templates', data)));
+}));
+api.put('/task-templates/:id', wrap((req) => {
+  const id = idParam(req);
+  const t = get('SELECT * FROM task_templates WHERE id = ?', id);
+  if (!t) throw notFound();
+  if (!ttplPerm(req.user, t)) throw new HttpError(403, 'Шаблон меняет его автор, менеджер или администратор');
+  const data = ttplData(req);
+  if ('title' in data) required(data, 'title');
+  if ('name' in data) { data.name = String(data.name || '').trim().slice(0, 120); required(data, 'name'); }
+  update('task_templates', id, data);
+  return shapeTtpl(get(`${TTPL_SELECT} WHERE t.id = ?`, id));
+}));
+api.delete('/task-templates/:id', wrap((req) => {
+  const id = idParam(req);
+  const t = get('SELECT * FROM task_templates WHERE id = ?', id);
+  if (!t) throw notFound();
+  if (!ttplPerm(req.user, t)) throw new HttpError(403, 'Шаблон удаляет его автор, менеджер или администратор');
+  run('DELETE FROM task_templates WHERE id = ?', id);
+  return { ok: true };
+}));
+
 /* ---------- чек-лист задачи ---------- */
 // Пункты отмечают и добавляют все, кто может работать с задачей (исполнитель, соисполнители, постановщик, админ)
 function checklistTask(req, taskId) {
@@ -586,6 +632,42 @@ api.put('/tasks/:id/deps', wrap((req) => {
   return taskDetails(getTask(id));
 }));
 
+/* ---------- упоминания (@имя) и уведомления ---------- */
+const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Сотрудники, упомянутые в тексте как «@Имя Фамилия». Длинные имена проверяются первыми,
+// чтобы «@Иса Хасанов» не засчитался ещё и как «@Иса»
+export function mentionedUsers(text) {
+  const users = all('SELECT id, name FROM users WHERE active = 1').sort((a, b) => b.name.length - a.name.length);
+  let rest = String(text || ''); const found = [];
+  for (const u of users) {
+    const re = new RegExp(`@${escRe(u.name)}(?![\\p{L}\\p{N}])`, 'giu');
+    if (re.test(rest)) { found.push(u); rest = rest.replace(re, ' '); }
+  }
+  return found;
+}
+function notifyMentions({ text, entity, entityId, authorId }) {
+  for (const u of mentionedUsers(text)) {
+    if (u.id === authorId) continue;
+    insert('notifications', { user_id: u.id, kind: 'mention', entity, entity_id: entityId, from_user_id: authorId, text: String(text).slice(0, 200) });
+  }
+}
+
+api.get('/notifications', wrap((req) => ({
+  unread: get('SELECT COUNT(*) c FROM notifications WHERE user_id = ? AND read_at IS NULL', req.user.id).c,
+  items: all(`SELECT n.*, u.name from_name, u.color from_color,
+      CASE n.entity WHEN 'task' THEN (SELECT title FROM tasks WHERE id = n.entity_id) ELSE (SELECT title FROM tickets WHERE id = n.entity_id) END entity_title,
+      CASE n.entity WHEN 'task' THEN (SELECT project_id FROM tasks WHERE id = n.entity_id) END project_id
+    FROM notifications n LEFT JOIN users u ON u.id = n.from_user_id WHERE n.user_id = ? ORDER BY n.id DESC LIMIT 30`, req.user.id),
+})));
+// { ids: [..] } — отметить прочитанными выбранные; без ids — все
+api.post('/notifications/read', wrap((req) => {
+  const list = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : null;
+  if (list) for (const id of list) run("UPDATE notifications SET read_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND user_id = ? AND read_at IS NULL", id, req.user.id);
+  else run("UPDATE notifications SET read_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ? AND read_at IS NULL", req.user.id);
+  return { ok: true };
+}));
+export const purgeNotifications = () => run("DELETE FROM notifications WHERE read_at IS NOT NULL AND read_at < strftime('%Y-%m-%dT%H:%M:%fZ','now','-60 days')");
+
 /* ---------- комментарии к задачам (чат) ---------- */
 const COMMENT_SELECT = `SELECT c.*, u.name user_name, u.color user_color, f.name file_name, f.size file_size, f.mime file_mime
   FROM task_comments c LEFT JOIN users u ON u.id = c.user_id LEFT JOIN files f ON f.id = c.file_id`;
@@ -607,6 +689,7 @@ api.post('/tasks/:id/comments', wrap((req) => {
   if (!body) throw bad('Пустое сообщение');
   if (body.length > 5000) throw bad('Сообщение слишком длинное (максимум 5000 символов)');
   const cid = insert('task_comments', { task_id: id, user_id: req.user.id, kind: 'text', body });
+  notifyMentions({ text: body, entity: 'task', entityId: id, authorId: req.user.id });
   logActivity(req.user.id, 'task', id, 'comment', `прокомментировал задачу «${task.title}»`);
   return get(`${COMMENT_SELECT} WHERE c.id = ?`, cid);
 }));
@@ -660,6 +743,7 @@ api.post('/tasks/:id/work', wrap((req) => {
       const status = action === 'close' ? 'done' : 'todo';
       if (t.status !== status) update('tasks', id, { status, completed_at: status === 'done' ? nowIso() : null });
       insert('task_comments', { task_id: id, user_id: req.user.id, kind: 'text', body: note, report: action, report_sec: worked });
+      notifyMentions({ text: note, entity: 'task', entityId: id, authorId: req.user.id });
     });
     logActivity(req.user.id, 'task', id, action === 'close' ? 'done' : 'pause',
       `${action === 'close' ? 'закрыл' : 'приостановил'} задачу «${t.title}»`);
@@ -784,9 +868,11 @@ function ticketComments(id, forPortal = false) {
 }
 api.post('/tickets/:id/comments', wrap((req) => {
   const id = idParam(req);
-  const body = String(req.body?.body || '').trim();
+  if (!get('SELECT 1 FROM tickets WHERE id = ?', id)) throw notFound();
+  const body = String(req.body?.body || '').trim().slice(0, 5000);
   if (!body) throw bad('Пустой комментарий');
-  insert('ticket_comments', { ticket_id: id, user_id: req.user.id, body: body.slice(0, 5000), internal: req.body?.internal ? 1 : 0 });
+  insert('ticket_comments', { ticket_id: id, user_id: req.user.id, body, internal: req.body?.internal ? 1 : 0 });
+  notifyMentions({ text: body, entity: 'ticket', entityId: id, authorId: req.user.id });
   return ticketComments(id);
 }));
 api.delete('/tickets/:id', requireRole('admin', 'manager'), wrap((req) => { const id = idParam(req); const t = get('SELECT title FROM tickets WHERE id = ?', id); trashDelete('ticket', 'tickets', id, t && `#${id} ${t.title}`); return { ok: true }; }));

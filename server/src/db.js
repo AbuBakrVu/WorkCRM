@@ -536,6 +536,34 @@ const MIGRATIONS = [
     addColumn(d, 'companies', 'edo_id', 'TEXT');
     addColumn(d, 'clients', 'edo_id', 'TEXT');
   },
+  // 18. Уведомления «вас упомянули» и шаблоны задач
+  (d) => d.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      entity TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      from_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      text TEXT,
+      read_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, id);
+    CREATE TABLE IF NOT EXISTS task_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      coassignee_ids TEXT,
+      observer_ids TEXT,
+      checklist TEXT,
+      subtasks TEXT,
+      due_days INTEGER,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`),
 ];
 
 {

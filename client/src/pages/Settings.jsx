@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { ROLES, USER_COLORS } from '../lib/constants';
-import { UserRound, Users, Building, FileText, Package, Plug, Trash2 } from 'lucide-react';
+import { UserRound, Users, Building, FileText, Package, Plug, Trash2, ListTodo } from 'lucide-react';
 import { Button, Card, Field, PageHeader, Avatar, cx } from '../components/ui';
 import Hub from '../components/Hub';
 import Team from './Team';
 import Catalog from './Catalog';
 import { CompaniesSettings } from '../components/Companies';
+import { TaskTemplatesSettings } from '../components/TaskTemplates';
 import { TemplatesSettings } from '../components/Documents';
 import { TrashSettings, shortUA } from '../components/Trash';
 import { fmtDateTime } from '../lib/format';
@@ -23,6 +24,7 @@ export default function Settings() {
       { value: 'team', label: 'Команда', icon: Users, element: <Team /> },
       { value: 'companies', label: 'Мои компании', icon: Building, hidden: !isManager, element: pane('Реквизиты, подпись и печать — для счетов, актов и КП', <CompaniesSettings />) },
       { value: 'templates', label: 'Шаблоны документов', icon: FileText, hidden: !isManager, element: pane('Word-шаблоны КП, счетов и актов', <TemplatesSettings />) },
+      { value: 'tasktpl', label: 'Шаблоны задач', icon: ListTodo, element: pane('Типовые задачи с чек-листом и подзадачами', <TaskTemplatesSettings />) },
       { value: 'catalog', label: 'Каталог', icon: Package, element: <Catalog /> },
       { value: 'integrations', label: 'Интеграции', icon: Plug, hidden: !isAdmin, element: pane('Внешние сервисы', <Integrations />) },
       { value: 'trash', label: 'Корзина', icon: Trash2, hidden: !isManager, element: pane('Удалённые записи можно восстановить', <TrashSettings />) },

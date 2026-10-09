@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, Circle, CircleDot, Play, Pencil, Calendar, Clock, FolderOpen, Send, Trash2, MessageSquare, Paperclip, FileText,
   Download, MoreHorizontal, Plus, X, Users, RotateCcw, PauseCircle, Lock, ChevronDown, Repeat,
 } from 'lucide-react';
-import { useApp, useNow, timerSeconds } from '../lib/store';
+import { useApp, useLoad, useNow, timerSeconds } from '../lib/store';
 import { taskPerms } from '../lib/perms';
+import { MessageText, useMentions } from './Mentions';
 import { api, fileUrl, fmtSize } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
@@ -12,6 +13,8 @@ import { ChecklistBlock, SubtasksBlock, DepsBlock } from './TaskExtras';
 import { RecurrenceFields, recurrenceBody, ruleText } from './Recurrence';
 import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
 import { HistoryPanel } from './History';
+
+const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
 
 export const isOverdue = (t) => t.status !== 'done' && t.due_date && t.due_date < todayStr();
 
@@ -72,13 +75,30 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
   const [f, setF] = useState({});
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
+  const { data: tpls } = useLoad(open && !task ? '/task-templates' : null);
   useEffect(() => {
     if (!open) return;
     setErrors({});
     setF(task ? { ...task } : { project_id: projectId || null, title: '', description: '', status: 'todo', assignee_id: null, due_date: null, coassignee_ids: [], observer_ids: [],
-      repeat: false, freq: 'monthly', every: 1, next_date: todayStr(), due_days: 3, checklistText: '' });
+      repeat: false, freq: 'monthly', every: 1, next_date: todayStr(), due_days: 3, checklistText: '', subtasksText: '' });
   }, [open, task, projectId]);
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
+  const applyTpl = (id) => {
+    const t = (tpls || []).find((x) => x.id === +id);
+    if (!t) return;
+    setF((x) => ({ ...x, title: t.title, description: t.description || '', assignee_id: t.assignee_id || x.assignee_id,
+      coassignee_ids: t.coassignee_ids, observer_ids: t.observer_ids, checklistText: t.checklist.join('\n'), subtasksText: t.subtasks.join('\n'),
+      due_date: t.due_days ? toDateStr(new Date(Date.now() + t.due_days * 864e5)) : x.due_date }));
+  };
+  const saveAsTpl = async () => {
+    if (!f.title?.trim()) { setErrors({ title: 'Укажите название задачи' }); return; }
+    try {
+      await api.post('/task-templates', { name: f.title.trim(), title: f.title.trim(), description: f.description || '', assignee_id: f.assignee_id ? +f.assignee_id : null,
+        coassignee_ids: f.coassignee_ids || [], observer_ids: f.observer_ids || [], checklist: lines(f.checklistText), subtasks: lines(f.subtasksText),
+        due_days: f.due_date ? Math.max(0, Math.round((new Date(f.due_date) - new Date(todayStr())) / 864e5)) : 0 });
+      toast('Шаблон сохранён — он в списке «Из шаблона»');
+    } catch (x) { toast(x.message, 'error'); }
+  };
 
   const submit = async (e) => {
     e?.preventDefault();
@@ -93,13 +113,14 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
       const body = { project_id: +f.project_id, title: f.title.trim(), description: f.description.trim(),
         assignee_id: f.assignee_id ? +f.assignee_id : null, due_date: f.due_date || null,
         coassignee_ids: f.coassignee_ids || [], observer_ids: f.observer_ids || [] };
-      const checklist = (f.checklistText || '').split('\n').map((x) => x.trim()).filter(Boolean);
+      const checklist = lines(f.checklistText);
+      const subtasks = lines(f.subtasksText);
       if (!task && f.repeat) {
         const r = await api.post('/recurrences', { ...body, checklist, ...recurrenceBody(f) });
         toast(`Повторяющаяся задача: ${ruleText(r)}. Следующая — ${fmtDate(r.next_date)}`);
         bump(); onClose(); return;
       }
-      const saved = task ? await api.put(`/tasks/${task.id}`, body) : await api.post('/tasks', { ...body, checklist });
+      const saved = task ? await api.put(`/tasks/${task.id}`, body) : await api.post('/tasks', { ...body, checklist, subtasks });
       toast(task ? 'Задача сохранена' : 'Задача создана');
       bump(); onSaved?.(saved); onClose();
     } catch (x) { toast(x.message, 'error'); } finally { setBusy(false); }
@@ -108,8 +129,13 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
   const err = (k) => errors[k] && <span className="block text-[11.5px] text-red-600 mt-1">{errors[k]}</span>;
   return (
     <Modal open={open} onClose={onClose} title={task ? 'Редактировать задачу' : 'Новая задача'} width={600}
-      footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit} disabled={busy}>{task ? 'Сохранить' : 'Создать задачу'}</Button></>}>
+      footer={<>{!task && <Button variant="ghost" className="mr-auto" onClick={saveAsTpl}>Сохранить как шаблон</Button>}<Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit} disabled={busy}>{task ? 'Сохранить' : 'Создать задачу'}</Button></>}>
       <form onSubmit={submit} className="space-y-3.5">
+        {!task && !!tpls?.length && (
+          <Field label="Из шаблона" hint="Заполнит название, описание, чек-лист и подзадачи">
+            <Select value={null} onChange={applyTpl} placeholder="Выбрать шаблон…" search options={tpls.map((t) => ({ value: t.id, label: t.name }))} />
+          </Field>
+        )}
         <Field label="Проект (организация)">
           <Select value={f.project_id} onChange={set('project_id')} placeholder="Выберите проект" search options={nameOptions(projects)} />
           {err('project_id')}
@@ -134,6 +160,9 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
         {!task && (<>
           <Field label="Чек-лист" hint="Необязательно. Каждая строка — отдельный пункт">
             <textarea className="input" rows={2} value={f.checklistText || ''} onChange={set('checklistText')} placeholder={'Купить кабель\nПротянуть линию\nПротестировать'} />
+          </Field>
+          <Field label="Подзадачи" hint="Необязательно. Каждая строка — отдельная задача внутри этой">
+            <textarea className="input" rows={2} value={f.subtasksText || ''} onChange={set('subtasksText')} placeholder={'Согласовать смету\nЗакупить оборудование'} />
           </Field>
           <div className={cx('rounded-2xl border transition-colors', f.repeat ? 'border-brand/40 bg-brand/[.04]' : 'border-line')}>
             <label className="flex items-center gap-2.5 px-4 h-11 cursor-pointer text-[13.5px] font-medium">
@@ -401,25 +430,6 @@ function dayLabel(d) {
   if (key === toDateStr(yest)) return 'Вчера';
   return fmtDate(d);
 }
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-function MessageText({ text, users, mine }) {
-  const re = useMemo(() => {
-    const names = users.map((u) => u.name).filter(Boolean).sort((a, b) => b.length - a.length).map(escapeRe);
-    return names.length ? new RegExp(`@(${names.join('|')})`, 'g') : null;
-  }, [users]);
-  if (!re || !text) return text;
-  const out = []; let last = 0; let m;
-  re.lastIndex = 0;
-  while ((m = re.exec(text))) {
-    if (m.index > last) out.push(text.slice(last, m.index));
-    out.push(<span key={m.index} className={cx('font-semibold rounded px-0.5', mine ? 'bg-white/20' : 'text-violet bg-violet/10')}>@{m[1]}</span>);
-    last = m.index + m[0].length;
-  }
-  out.push(text.slice(last));
-  return out;
-}
-
 function FileCard({ c, mine, onLoad }) {
   const isImg = /^image\/(png|jpe?g|gif|webp)$/.test(c.file_mime || '');
   if (isImg) {
@@ -449,7 +459,6 @@ export function TaskChat({ taskId, participants = [] }) {
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [drag, setDrag] = useState(false);
-  const [mention, setMention] = useState(null);
   const [focused, setFocused] = useState(false);
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -487,7 +496,7 @@ export function TaskChat({ taskId, participants = [] }) {
     setSending(true);
     try {
       append(await api.post(`/tasks/${taskId}/comments`, { body }));
-      setText(''); setMention(null);
+      setText(''); mn.reset();
       if (inputRef.current) inputRef.current.style.height = 'auto';
       inputRef.current?.focus();
       bump();
@@ -506,28 +515,9 @@ export function TaskChat({ taskId, participants = [] }) {
     catch (e) { toast(e.message, 'error'); }
   };
 
-  const candidates = mention ? users.filter((u) => u.active && u.name.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 6) : [];
-  const onChange = (e) => {
-    const v = e.target.value; setText(v);
-    const caret = e.target.selectionStart;
-    const m = /(^|\s)@([^\s@]{0,30})$/.exec(v.slice(0, caret));
-    setMention(m ? { query: m[2], start: caret - m[2].length - 1, index: 0 } : null);
-    e.target.style.height = 'auto'; e.target.style.height = `${Math.min(160, e.target.scrollHeight)}px`;
-  };
-  const pickMention = (u) => {
-    const caret = inputRef.current.selectionStart;
-    setText(`${text.slice(0, mention.start)}@${u.name} ${text.slice(caret)}`);
-    const pos = mention.start + u.name.length + 2;
-    setMention(null);
-    requestAnimationFrame(() => { inputRef.current.focus(); inputRef.current.setSelectionRange(pos, pos); });
-  };
+  const mn = useMentions(users, text, setText, inputRef);
   const onKeyDown = (e) => {
-    if (mention && candidates.length) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setMention((m) => ({ ...m, index: (m.index + 1) % candidates.length })); return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setMention((m) => ({ ...m, index: (m.index - 1 + candidates.length) % candidates.length })); return; }
-      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(candidates[mention.index] || candidates[0]); return; }
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMention(null); return; }
-    }
+    if (mn.onKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
   };
 
@@ -629,25 +619,14 @@ export function TaskChat({ taskId, participants = [] }) {
 
       {/* Ввод */}
       <div className="relative shrink-0 border-t border-line bg-panel px-4 py-3">
-        {mention && candidates.length > 0 && (
-          <div className="absolute bottom-full left-4 mb-2 w-80 bg-panel border border-line rounded-xl shadow-xl p-1.5 anim-pop z-10">
-            <div className="px-2 py-1 text-[11px] font-medium text-ink-3">Упомянуть</div>
-            {candidates.map((u, i) => (
-              <button key={u.id} onMouseDown={(e) => { e.preventDefault(); pickMention(u); }}
-                className={cx('w-full flex items-center gap-2 px-2 h-9 rounded-lg text-[13px] text-left', i === mention.index ? 'bg-canvas' : 'hover:bg-canvas')}>
-                <Avatar user={u} size={22} ring={false} /><span className="whitespace-nowrap">{u.name}</span>
-                <span className="ml-auto text-[11px] text-ink-3 truncate min-w-0">{u.position}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {mn.popup('absolute bottom-full left-4 mb-2')}
         <div className={cx('flex items-end gap-1.5 rounded-2xl border bg-panel pl-1.5 pr-1.5 py-1.5 transition-shadow',
           focused ? 'border-violet/60 ring-3 ring-violet/10' : 'border-line-strong')}>
           <input ref={fileRef} type="file" multiple hidden onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} />
           <button onClick={() => fileRef.current?.click()} title="Прикрепить файл (до 25 МБ)"
             className="size-9 shrink-0 rounded-full text-ink-3 hover:text-ink hover:bg-canvas flex items-center justify-center"><Paperclip size={17} /></button>
-          <textarea ref={inputRef} value={text} rows={1} onChange={onChange} onKeyDown={onKeyDown}
-            onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); setTimeout(() => setMention(null), 150); }}
+          <textarea ref={inputRef} value={text} rows={1} onChange={mn.onChange} onKeyDown={onKeyDown}
+            onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); mn.closeSoon(); }}
             placeholder="Сообщение… (@ — упомянуть коллегу)" title="Enter — отправить, Shift+Enter — новая строка"
             className="flex-1 resize-none outline-none text-[13.5px] bg-transparent py-2 max-h-40 placeholder:text-ink-3" style={{ minHeight: 36 }} />
           <button onClick={send} disabled={!text.trim() || sending} title="Отправить (Enter)"
