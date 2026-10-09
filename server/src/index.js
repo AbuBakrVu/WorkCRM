@@ -27,7 +27,8 @@ app.use('/api', api);
 const PUBLIC_DIR = process.env.PUBLIC_DIR || path.resolve(__dirname, '../public');
 if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(PUBLIC_DIR, { index: false, maxAge: '7d', setHeaders: (res, p) => {
-    if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    // страницы, service worker и манифест всегда перепроверяются; файлы /assets/* — с хэшем в имени, их можно кэшировать надолго
+    if (/\.(html|webmanifest)$/.test(p) || p.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
   } }));
   app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 }

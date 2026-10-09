@@ -1,0 +1,20 @@
+{
+  "name": "CRM",
+  "short_name": "CRM",
+  "description": "Рабочая CRM: проекты, заявки, клиенты, финансы",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f2",
+  "theme_color": "#14532d",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Новая задача", "url": "/projects?newtask=1" },
+    { "name": "Заявки", "url": "/tickets" }
+  ]
+}
