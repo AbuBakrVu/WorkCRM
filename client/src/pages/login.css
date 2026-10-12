@@ -1,0 +1,140 @@
+/* Страница входа: две вкладки, иллюстрация и формы переключаются со сдвигом.
+   Состояние — CSS-переменные на .auth-card: --active (полоска вкладки), --hero (иллюстрация), --forms (формы). */
+
+.auth-card {
+  --active: 33.33%;
+  --hero: 0;
+  --forms: 0;
+  width: 100%;
+  max-width: 440px;
+  padding: 6px;
+  border-radius: 26px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 24px 60px -24px rgb(14 47 32 / .28);
+}
+
+/* ---------- навигация ---------- */
+.auth-nav {
+  position: relative;
+  display: flex;
+  height: 92px;
+  padding: 20px 0 22px;
+  margin: 0 0 10px;
+  list-style: none;
+}
+.auth-nav li { flex: 1 1 0; display: grid; place-items: center; }
+.auth-nav button {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  width: 100%; height: 100%;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--color-ink-3);
+  font: inherit; font-size: 12px; font-weight: 500;
+  transition: color .3s, opacity .3s;
+}
+.auth-nav button.active { color: var(--color-brand); }
+.auth-nav button:not(.active):hover { color: var(--color-brand); opacity: .7; }
+.auth-nav button:focus-visible { outline: 2px solid var(--color-brand); outline-offset: -4px; border-radius: 12px; }
+
+.auth-bar {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: var(--active);
+  width: 33.33%;
+  height: 4px;
+  transition: .4s ease-in-out;
+  pointer-events: none;
+}
+.auth-bar::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 50%;
+  translate: -50% 0;
+  width: 56px; height: 4px;
+  border-radius: 8px 8px 0 0;
+  background: var(--color-brand);
+}
+
+/* ---------- иллюстрация ---------- */
+.auth-hero {
+  position: relative;
+  flex: 0 0 300px;
+  height: 180px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--color-brand);
+  /* мягкое свечение неба */
+  background-image: radial-gradient(ellipse at 70% 20%, rgb(255 255 255 / .14), transparent 60%);
+}
+.auth-hero-inner {
+  position: absolute;
+  top: var(--hero);
+  left: 0; right: 0;
+  height: 100%;
+  transition: top .5s ease-in-out;
+}
+.auth-hero-content {
+  height: 100%;
+  padding: 0 0 0 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.auth-hero-content > div { flex: 1 0 0; min-width: 0; }
+.auth-hero h2 { margin: 0; color: #fff; font-size: 19px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+.auth-hero h3 { margin: 6px 0 0; color: #fff; opacity: .78; font-size: 12.5px; font-weight: 500; line-height: 1.4; }
+.auth-hero svg { height: 100%; width: 48%; flex: 0 1 auto; align-self: flex-end; }
+
+/* ---------- формы ---------- */
+.auth-form { position: relative; overflow: hidden; height: 370px; }
+.auth-forms {
+  position: absolute;
+  top: 0; left: var(--forms);
+  width: 200%; height: 100%;
+  display: flex;
+  transition: .5s ease-in-out;
+}
+.auth-forms form { flex: 1 0 50%; padding: 22px 20px; display: flex; flex-direction: column; }
+.auth-forms .auth-switch { font-size: 12.5px; color: var(--color-ink-3); margin: 0 0 16px; }
+.auth-forms .auth-switch button { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--color-brand); cursor: pointer; }
+.auth-forms .auth-switch button:hover { text-decoration: underline; }
+.auth-input { position: relative; }
+.auth-input .input { height: 42px; padding-right: 38px; border-radius: 12px; }
+.auth-input svg { position: absolute; right: 13px; top: 50%; translate: 0 -50%; color: var(--color-ink-3); pointer-events: none; }
+.auth-note { font-size: 11.5px; line-height: 1.5; color: var(--color-ink-3); margin: 14px 0 0; }
+
+/* во время ресайза окна анимации отключаем, чтобы ничего не «ехало» */
+.auth-card.resizing .auth-hero-inner,
+.auth-card.resizing .auth-bar,
+.auth-card.resizing .auth-forms { transition: none; }
+
+/* ---------- десктоп: вкладки слева столбцом, иллюстрация выступает за карточку ---------- */
+@media (width >= 720px) {
+  .auth-card {
+    display: flex;
+    align-items: stretch;
+    max-width: none;
+    width: 840px;
+    height: 440px;
+    padding: 0;
+    border-radius: 28px;
+  }
+  .auth-nav { flex: 0 0 132px; flex-direction: column; height: auto; margin: 0; padding: 24px 0; }
+  .auth-bar { top: var(--active); left: 0; width: 100%; height: 33.33%; }
+  .auth-bar::after {
+    top: 50%; left: 0; translate: 0 -50%;
+    width: 5px; height: 56px;
+    border-radius: 0 8px 8px 0;
+  }
+  .auth-hero { flex-basis: 320px; margin: -32px 0; height: auto; border-radius: 28px; box-shadow: 0 24px 50px -20px rgb(14 47 32 / .45); }
+  .auth-hero-content { flex-direction: column; align-items: stretch; padding: 40px 0 0; text-align: center; gap: 0; }
+  .auth-hero-content > div { flex: 0 0 auto; padding: 0 26px; }
+  .auth-hero h2 { font-size: 26px; }
+  .auth-hero h3 { font-size: 13.5px; }
+  /* чуть шире блока — края пейзажа обрезаются, а сам он крупнее и заполняет небо */
+  .auth-hero svg { width: 120%; height: auto; flex: 0 0 auto; margin: auto -10% 0; max-width: none; }
+  .auth-form { flex: 1 1 auto; height: 100%; }
+  .auth-forms { flex-direction: column; width: 100%; height: 200%; left: 0; top: var(--forms); }
+  .auth-forms form { flex: 1 0 50%; padding: 34px 36px; justify-content: center; }
+}
