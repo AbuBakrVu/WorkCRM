@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { api } from '../lib/api';
 import { PROJECT_STATUS } from '../lib/constants';
-import { Modal, Field, Select, Button, UserPicker, ConfirmButton, userOptions, nameOptions } from './ui';
+import { Modal, Field, Select, Button, UserPicker, ConfirmButton, DeleteWithHours, userOptions, nameOptions } from './ui';
 
 // Проект = обслуживаемая организация (Минфин, университет, СДЭК…)
 export function ProjectFormModal({ open, onClose, onSaved, project }) {
@@ -38,7 +38,8 @@ export function ProjectFormModal({ open, onClose, onSaved, project }) {
   return (
     <Modal open={open} onClose={onClose} title={project ? 'Настройки проекта' : 'Новый проект'} width={560}
       footer={<>
-        {project && isManager && <div className="mr-auto"><ConfirmButton onConfirm={remove}>Удалить проект</ConfirmButton></div>}
+        {project && isManager && <div className="mr-auto"><DeleteWithHours trackedSec={project.tracked_sec} what="проект" onConfirm={remove}
+          hint="Если работы по организации закончены — лучше поставить проекту статус «Готово»: история задач и отчёты сохранятся полностью.">Удалить проект</DeleteWithHours></div>}
         <Button onClick={onClose}>Отмена</Button>
         <Button variant="primary" onClick={submit} disabled={busy}>{project ? 'Сохранить' : 'Создать проект'}</Button>
       </>}>

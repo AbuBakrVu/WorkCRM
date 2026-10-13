@@ -76,3 +76,41 @@ test('шаблоны задач: создание, список, правка, �
   assert.equal((await call('DELETE', `/task-templates/${t.id}`, null, anna)).status, 200);
   assert.equal((await call('GET', '/task-templates', null, anna)).data.length, 0);
 });
+
+test('удаление проекта и задачи не уносит часы из отчётов клиента', async () => {
+  const anna = await login('anna@test.ru');
+  const year = '?from=2000-01-01&to=2100-01-01';
+  const c = (await call('POST', '/clients', { name: 'Клиент Часы' }, anna)).data;
+  const p = (await call('POST', '/projects', { name: 'Проект Часы', client_id: c.id }, anna)).data;
+  const t = (await call('POST', '/tasks', { project_id: p.id, title: 'Задача Часы', description: 'Описание' }, anna)).data;
+  const e = await call('POST', '/time', { project_id: p.id, task_id: t.id, started_at: '2026-05-10T09:00:00Z', duration_sec: 7200 }, anna);
+  assert.equal(e.status, 200, JSON.stringify(e.data));
+  const hoursOf = async () => (await call('GET', `/reports/profit${year}`, null, anna)).data.rows.find((r) => r.id === c.id)?.hours;
+  assert.equal(await hoursOf(), 2);
+
+  // переименование проекта/задачи подхватывается сохранёнными названиями
+  await call('PUT', `/tasks/${t.id}`, { title: 'Задача Часы 2' }, anna);
+  await call('DELETE', `/tasks/${t.id}`, null, anna);
+  let entry = (await call('GET', '/time?from=2026-05-01', null, anna)).data.find((x) => x.id === e.data.id);
+  assert.equal(entry.task_title, 'Задача Часы 2');
+  assert.equal(entry.task_deleted, 1);
+  assert.equal(await hoursOf(), 2, 'после удаления задачи часы у клиента');
+
+  await call('DELETE', `/projects/${p.id}`, null, anna);
+  entry = (await call('GET', '/time?from=2026-05-01', null, anna)).data.find((x) => x.id === e.data.id);
+  assert.equal(entry.project_name, 'Проект Часы');
+  assert.equal(entry.project_deleted, 1);
+  assert.equal(await hoursOf(), 2, 'после удаления проекта часы у клиента');
+  const rep = (await call('GET', `/reports/client${year}&client_id=${c.id}`, null, anna)).data;
+  assert.equal(rep.total_sec, 7200);
+  assert.equal(rep.work[0].task_title, 'Задача Часы 2');
+
+  // восстановление из корзины возвращает ссылки
+  for (const x of (await call('GET', '/trash', null, anna)).data.filter((x) => ['project', 'task'].includes(x.entity))) {
+    assert.equal((await call('POST', `/trash/${x.id}/restore`, null, anna)).status, 200);
+  }
+  entry = (await call('GET', '/time?from=2026-05-01', null, anna)).data.find((x) => x.id === e.data.id);
+  assert.equal(entry.project_id, p.id);
+  assert.equal(entry.task_id, t.id);
+  assert.equal(entry.project_deleted, 0);
+});

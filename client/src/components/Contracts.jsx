@@ -141,8 +141,8 @@ function ContractDrawer({ id, month, onClose }) {
                 {k.entries.map((e) => (
                   <div key={e.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
                     <span className="text-ink-3 w-14 tabular">{fmtDate(e.started_at)}</span>
-                    <div className="flex-1 min-w-0"><div className="truncate text-ink">{e.task_title || (e.ticket_id ? `#${e.ticket_id} ${e.ticket_title}` : e.description || e.project_name)}</div>
-                      {e.description && (e.task_title || e.ticket_id) && <div className="text-[11.5px] text-ink-3 truncate">{e.description}</div>}</div>
+                    <div className="flex-1 min-w-0"><div className="truncate text-ink">{e.task_title || (e.ticket_title ? `${e.ticket_id ? `#${e.ticket_id} ` : ''}${e.ticket_title}` : e.description || e.project_name)}</div>
+                      {e.description && (e.task_title || e.ticket_title) && <div className="text-[11.5px] text-ink-3 truncate">{e.description}</div>}</div>
                     <span className="text-ink-3 text-[12px]">{e.user_name?.split(' ')[0]}</span>
                     <span className="tabular font-medium w-14 text-right inline-flex items-center justify-end gap-1"><Clock size={12} className="text-ink-3" />{fmtHM(e.duration_sec)}</span>
                   </div>

@@ -235,8 +235,8 @@ export const CONTRACT_SELECT = `SELECT k.*, c.name client_name, p.name project_n
 const CONTRACT_ENTRIES = `FROM time_entries e
   LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
   WHERE e.ended_at IS NOT NULL AND strftime('%Y-%m', datetime(e.started_at, '+3 hours')) = ?
-    AND ((? IS NOT NULL AND (e.project_id = ? OR t.project_id = ?)) OR (? IS NOT NULL AND (p.client_id = ? OR t.client_id = ?)))`;
-const contractArgs = (k, month) => [month, k.project_id, k.project_id, k.project_id, k.client_id, k.client_id, k.client_id];
+    AND ((? IS NOT NULL AND (e.project_id = ? OR t.project_id = ?)) OR (? IS NOT NULL AND (p.client_id = ? OR t.client_id = ? OR e.client_id = ?)))`;
+const contractArgs = (k, month) => [month, k.project_id, k.project_id, k.project_id, k.client_id, k.client_id, k.client_id, k.client_id];
 export function contractUsage(k, month) {
   const used = get(`SELECT COALESCE(SUM(e.duration_sec),0) s ${CONTRACT_ENTRIES}`, ...contractArgs(k, month)).s;
   const usedH = used / 3600;
@@ -257,7 +257,8 @@ api.get('/contracts/:id', wrap((req) => {
   const [y, m] = month.split('-').map(Number);
   for (let i = 5; i >= 0; i--) { const d = new Date(Date.UTC(y, m - 1 - i, 1)); history.push(contractUsage(k, d.toISOString().slice(0, 7))); }
   // Детализация за месяц: на что ушло время
-  const entries = all(`SELECT e.id, e.started_at, e.duration_sec, e.description, u.name user_name, tk.title task_title, t.title ticket_title, t.id ticket_id, p.name project_name
+  const entries = all(`SELECT e.id, e.started_at, e.duration_sec, e.description, u.name user_name, COALESCE(tk.title, e.task_title) task_title,
+      COALESCE(t.title, e.ticket_title) ticket_title, t.id ticket_id, COALESCE(p.name, e.project_name) project_name
     ${CONTRACT_ENTRIES.replace('LEFT JOIN tickets t', 'LEFT JOIN users u ON u.id = e.user_id LEFT JOIN tasks tk ON tk.id = e.task_id LEFT JOIN tickets t')} ORDER BY e.started_at DESC`, ...contractArgs(k, month));
   return { ...k, usage: contractUsage(k, month), history, entries };
 }));

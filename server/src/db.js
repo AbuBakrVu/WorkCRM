@@ -564,6 +564,47 @@ const MIGRATIONS = [
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );`),
+  // 19. Запись времени помнит клиента и названия проекта/задачи/заявки — после удаления проекта или задачи
+  //     часы не «теряются» из отчётов клиента и абонентских договоров. Поля держат в актуальном виде триггеры:
+  //     при привязке записи — копируются, при переименовании проекта/задачи — обновляются,
+  //     при удалении (ссылка → NULL) — остаются как были.
+  (d) => {
+    addColumn(d, 'time_entries', 'client_id', 'INTEGER REFERENCES clients(id) ON DELETE SET NULL');
+    addColumn(d, 'time_entries', 'project_name', 'TEXT');
+    addColumn(d, 'time_entries', 'task_title', 'TEXT');
+    addColumn(d, 'time_entries', 'ticket_title', 'TEXT');
+    // Снимок по ссылкам записи: пустая ссылка не затирает сохранённое значение
+    const snap = (row) => `UPDATE time_entries SET
+        client_id = CASE WHEN ${row}.project_id IS NOT NULL OR ${row}.ticket_id IS NOT NULL
+          THEN COALESCE((SELECT client_id FROM projects WHERE id = ${row}.project_id), (SELECT client_id FROM tickets WHERE id = ${row}.ticket_id))
+          ELSE client_id END,
+        project_name = COALESCE((SELECT name FROM projects WHERE id = ${row}.project_id), project_name),
+        task_title = COALESCE((SELECT title FROM tasks WHERE id = ${row}.task_id), task_title),
+        ticket_title = COALESCE((SELECT title FROM tickets WHERE id = ${row}.ticket_id), ticket_title)
+      WHERE id = ${row}.id;`;
+    d.exec(`
+      UPDATE time_entries SET
+        client_id = COALESCE((SELECT client_id FROM projects WHERE id = time_entries.project_id), (SELECT client_id FROM tickets WHERE id = time_entries.ticket_id)),
+        project_name = (SELECT name FROM projects WHERE id = time_entries.project_id),
+        task_title = (SELECT title FROM tasks WHERE id = time_entries.task_id),
+        ticket_title = (SELECT title FROM tickets WHERE id = time_entries.ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_time_client ON time_entries(client_id);
+      CREATE TRIGGER IF NOT EXISTS trg_time_snap_ins AFTER INSERT ON time_entries BEGIN ${snap('NEW')} END;
+      CREATE TRIGGER IF NOT EXISTS trg_time_snap_upd AFTER UPDATE OF project_id, task_id, ticket_id ON time_entries BEGIN ${snap('NEW')} END;
+      CREATE TRIGGER IF NOT EXISTS trg_time_project_upd AFTER UPDATE OF name, client_id ON projects BEGIN
+        UPDATE time_entries SET project_name = NEW.name,
+          client_id = COALESCE(NEW.client_id, (SELECT client_id FROM tickets WHERE id = time_entries.ticket_id))
+        WHERE project_id = NEW.id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS trg_time_task_upd AFTER UPDATE OF title ON tasks BEGIN
+        UPDATE time_entries SET task_title = NEW.title WHERE task_id = NEW.id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS trg_time_ticket_upd AFTER UPDATE OF title, client_id ON tickets BEGIN
+        UPDATE time_entries SET ticket_title = NEW.title,
+          client_id = COALESCE((SELECT client_id FROM projects WHERE id = time_entries.project_id), NEW.client_id)
+        WHERE ticket_id = NEW.id;
+      END;`);
+  },
 ];
 
 {
