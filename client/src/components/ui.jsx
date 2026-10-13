@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { X, ChevronDown, Check, ArrowUpRight, Search } from 'lucide-react';
-import { initials } from '../lib/format';
+import { X, ChevronDown, Check, ArrowUpRight, Search, Clock } from 'lucide-react';
+import { initials, fmtHours } from '../lib/format';
 
 export const cx = (...a) => a.filter(Boolean).join(' ');
 
@@ -452,4 +452,35 @@ export function ConfirmButton({ onConfirm, children = 'Удалить', ...p }) 
   const [armed, setArmed] = useState(false);
   useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 3000); return () => clearTimeout(t); }, [armed]);
   return <Button variant="danger" size="sm" {...p} onClick={() => (armed ? onConfirm() : setArmed(true))}>{armed ? 'Точно удалить?' : children}</Button>;
+}
+
+// Окно «на это списано время — точно удалить?». trackedSec — учтённое время, what — «проект» / «задачу»,
+// hint — что сделать вместо удаления
+export function HoursDeleteDialog({ open, onClose, trackedSec, what, hint, onConfirm }) {
+  return (
+    <Modal open={open} onClose={onClose} title={`Удалить ${what}?`} width={460}
+      footer={<>
+        <Button onClick={onClose}>Отмена</Button>
+        <Button variant="danger" onClick={() => { onClose(); onConfirm(); }}>Всё равно удалить</Button>
+      </>}>
+      <div className="flex gap-3 rounded-xl bg-amber-50 border border-amber-300/60 p-3 text-[13px]">
+        <Clock size={18} className="text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <div className="font-semibold text-ink">Учтено {fmtHours(trackedSec)}</div>
+          <div className="text-ink-2 mt-1">Часы останутся у сотрудников и в отчётах клиента, но без ссылки — с пометкой «удалён».
+            Из корзины можно восстановить в течение 30 дней.</div>
+        </div>
+      </div>
+      {hint && <p className="text-[13px] text-ink-2 mt-3">{hint}</p>}
+    </Modal>
+  );
+}
+// Кнопка удаления: если на объект списано время — сначала окно с предупреждением, иначе обычная двойная кнопка
+export function DeleteWithHours({ trackedSec, what, hint, onConfirm, children }) {
+  const [open, setOpen] = useState(false);
+  if (!trackedSec) return <ConfirmButton onConfirm={onConfirm}>{children}</ConfirmButton>;
+  return <>
+    <Button variant="danger" size="sm" onClick={() => setOpen(true)}>{children}</Button>
+    <HoursDeleteDialog open={open} onClose={() => setOpen(false)} trackedSec={trackedSec} what={what} hint={hint} onConfirm={onConfirm} />
+  </>;
 }

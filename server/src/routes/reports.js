@@ -41,10 +41,11 @@ api.get('/reports/profit', requireRole('admin', 'manager'), wrap((req) => {
       (SELECT COALESCE(SUM(amount),0) FROM transactions x WHERE x.client_id = c.id AND x.type = 'income' AND x.date BETWEEN ? AND ?) revenue,
       (SELECT COALESCE(SUM(amount),0) FROM transactions x WHERE x.client_id = c.id AND x.type = 'expense' AND x.date BETWEEN ? AND ?) expenses
     FROM clients c ORDER BY c.name`, from, to, from, to);
-  const time = all(`SELECT COALESCE(p.client_id, t.client_id) client_id, SUM(e.duration_sec) sec, SUM(e.duration_sec / 3600.0 * COALESCE(u.hourly_rate,0)) cost
+  // e.client_id — клиент, сохранённый в записи (часы удалённых проектов/заявок остаются у клиента)
+  const time = all(`SELECT COALESCE(p.client_id, t.client_id, e.client_id) client_id, SUM(e.duration_sec) sec, SUM(e.duration_sec / 3600.0 * COALESCE(u.hourly_rate,0)) cost
     FROM time_entries e JOIN users u ON u.id = e.user_id LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
-    WHERE e.ended_at IS NOT NULL AND ${MSK('e.started_at')} BETWEEN ? AND ? AND COALESCE(p.client_id, t.client_id) IS NOT NULL
-    GROUP BY COALESCE(p.client_id, t.client_id)`, from, to);
+    WHERE e.ended_at IS NOT NULL AND ${MSK('e.started_at')} BETWEEN ? AND ? AND COALESCE(p.client_id, t.client_id, e.client_id) IS NOT NULL
+    GROUP BY COALESCE(p.client_id, t.client_id, e.client_id)`, from, to);
   const tm = Object.fromEntries(time.map((r) => [r.client_id, r]));
   const out = rows.map((c) => {
     const t = tm[c.id] || { sec: 0, cost: 0 };
@@ -76,16 +77,19 @@ export function buildClientReport(query, forPortal = false) {
   const project = projectId ? get('SELECT id, name FROM projects WHERE id = ?', projectId) : null;
   const company = (!forPortal && query.company_id && get('SELECT * FROM companies WHERE id = ?', Number(query.company_id)))
     || get('SELECT * FROM companies ORDER BY is_default DESC, id LIMIT 1') || null;
-  const match = `((? IS NOT NULL AND (e.project_id = ? OR t.project_id = ?)) OR (? IS NOT NULL AND (p.client_id = ? OR t.client_id = ?)))`;
-  const margs = [projectId, projectId, projectId, clientId, clientId, clientId];
+  const match = `((? IS NOT NULL AND (e.project_id = ? OR t.project_id = ?)) OR (? IS NOT NULL AND (p.client_id = ? OR t.client_id = ? OR e.client_id = ?)))`;
+  const margs = [projectId, projectId, projectId, clientId, clientId, clientId, clientId];
   // Время, сгруппированное по задаче / заявке
-  const work = all(`SELECT e.task_id, e.ticket_id, tk.title task_title, tk.status task_status, t.title ticket_title, t.status ticket_status,
+  // Удалённые задачи/заявки группируем по сохранённому названию
+  const work = all(`SELECT e.task_id, e.ticket_id, COALESCE(tk.title, e.task_title) task_title, tk.status task_status,
+      COALESCE(t.title, e.ticket_title) ticket_title, t.status ticket_status,
       SUM(e.duration_sec) sec, MIN(${MSK('e.started_at')}) first_day, MAX(${MSK('e.started_at')}) last_day,
       GROUP_CONCAT(DISTINCT u.name) people, GROUP_CONCAT(e.description, '\u0001') notes
     FROM time_entries e JOIN users u ON u.id = e.user_id LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
     LEFT JOIN tasks tk ON tk.id = e.task_id
     WHERE e.ended_at IS NOT NULL AND ${MSK('e.started_at')} BETWEEN ? AND ? AND ${match}
-    GROUP BY e.task_id, e.ticket_id ORDER BY last_day DESC`, from, to, ...margs)
+    GROUP BY e.task_id, e.ticket_id, CASE WHEN e.task_id IS NULL THEN e.task_title END, CASE WHEN e.ticket_id IS NULL THEN e.ticket_title END
+    ORDER BY last_day DESC`, from, to, ...margs)
     .map((w) => ({ ...w, notes: [...new Set(String(w.notes || '').split('\u0001').map((x) => x.trim()).filter(Boolean))].slice(0, 8) }));
   // Итоги по закрытым задачам (отчёт «с каким итогом закрыта»)
   const closed = all(`SELECT tk.id, tk.title, tk.completed_at,

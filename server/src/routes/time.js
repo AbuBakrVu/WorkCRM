@@ -2,7 +2,11 @@ import { all, get, run, tx } from '../db.js';
 import { api, HttpError, bad, notFound, wrap, pick, insert, update, idParam, required, nowIso } from './shared.js';
 
 /* ---------- time tracking ---------- */
-const TIME_SELECT = `SELECT e.*, u.name user_name, u.color user_color, p.name project_name, t.title task_title, k.title ticket_title,
+// Названия берём из сохранённых в записи (если проект/задачу/заявку удалили); *_deleted — признак для интерфейса
+const TIME_SELECT = `SELECT e.*, u.name user_name, u.color user_color,
+    COALESCE(p.name, e.project_name) project_name, COALESCE(t.title, e.task_title) task_title, COALESCE(k.title, e.ticket_title) ticket_title,
+    (e.project_id IS NULL AND e.project_name IS NOT NULL) project_deleted, (e.task_id IS NULL AND e.task_title IS NOT NULL) task_deleted,
+    (e.ticket_id IS NULL AND e.ticket_title IS NOT NULL) ticket_deleted,
     CASE WHEN e.ended_at IS NULL THEN CAST((julianday('now') - julianday(e.started_at)) * 86400 AS INTEGER) ELSE e.duration_sec END live_sec
   FROM time_entries e JOIN users u ON u.id = e.user_id LEFT JOIN projects p ON p.id = e.project_id
   LEFT JOIN tasks t ON t.id = e.task_id LEFT JOIN tickets k ON k.id = e.ticket_id`;
@@ -113,6 +117,10 @@ api.put('/time/:id', wrap((req) => {
     data.duration_sec = Math.max(0, Math.round(Number(data.duration_sec)));
     data.ended_at = new Date(new Date(e.started_at).getTime() + data.duration_sec * 1000).toISOString();
   } else delete data.duration_sec;
+  // Привязку сняли вручную — забываем и сохранённое название (клиента пересчитает триггер по оставшимся ссылкам)
+  if ('project_id' in data && !data.project_id) { data.project_name = null; data.client_id = null; }
+  if ('task_id' in data && !data.task_id) data.task_title = null;
+  if ('ticket_id' in data && !data.ticket_id) { data.ticket_title = null; data.client_id = null; }
   update('time_entries', id, data);
   return get(`${TIME_SELECT} WHERE e.id = ?`, id);
 }));

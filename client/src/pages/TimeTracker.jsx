@@ -32,9 +32,11 @@ export default function TimeTracker({ embedded = false, openAdd = false, onAddOp
   const sheet = useMemo(() => {
     const rows = {};
     for (const e of entries) {
-      const key = e.project_id ? `p${e.project_id}` : e.ticket_id ? `t${e.ticket_id}` : 'none';
-      const label = e.project_name || (e.ticket_id ? `#${e.ticket_id} ${e.ticket_title}` : 'Без проекта');
-      rows[key] ??= { key, label, kind: e.project_id ? 'Проект' : e.ticket_id ? 'Заявка' : '', days: Array(7).fill(0), total: 0 };
+      // Удалённый проект/заявка — строкой по сохранённому названию
+      const key = e.project_id ? `p${e.project_id}` : e.project_name ? `pd:${e.project_name}` : e.ticket_id ? `t${e.ticket_id}` : e.ticket_title ? `td:${e.ticket_title}` : 'none';
+      const label = e.project_name ? `${e.project_name}${e.project_deleted ? ' (удалён)' : ''}`
+        : e.ticket_title ? `${e.ticket_id ? `#${e.ticket_id} ` : ''}${e.ticket_title}${e.ticket_deleted ? ' (удалена)' : ''}` : 'Без проекта';
+      rows[key] ??= { key, label, kind: e.project_name ? 'Проект' : e.ticket_title ? 'Заявка' : '', days: Array(7).fill(0), total: 0 };
       const di = Math.floor((parseDate(e.started_at) - week) / 864e5);
       if (di >= 0 && di < 7) { rows[key].days[di] += e.live_sec; rows[key].total += e.live_sec; }
     }
@@ -53,7 +55,7 @@ export default function TimeTracker({ embedded = false, openAdd = false, onAddOp
 
   const exportCsv = () => {
     const rows = [['Дата', 'Сотрудник', 'Проект', 'Задача/заявка', 'Описание', 'Начало', 'Часы']];
-    entries.forEach((e) => rows.push([toDateStr(parseDate(e.started_at)), e.user_name, e.project_name || '', e.task_title || (e.ticket_id ? `#${e.ticket_id} ${e.ticket_title}` : ''),
+    entries.forEach((e) => rows.push([toDateStr(parseDate(e.started_at)), e.user_name, e.project_name || '', e.task_title || (e.ticket_title ? `${e.ticket_id ? `#${e.ticket_id} ` : ''}${e.ticket_title}` : ''),
       e.description || '', fmtTime(e.started_at), (e.live_sec / 3600).toFixed(2).replace('.', ',')]));
     const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const a = document.createElement('a');
@@ -156,7 +158,7 @@ export default function TimeTracker({ embedded = false, openAdd = false, onAddOp
                   {!who && <Avatar user={{ name: e.user_name, color: e.user_color }} size={24} ring={false} />}
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] truncate">{e.description || <span className="text-ink-3">Без описания</span>}</div>
-                    <div className="text-[11.5px] text-ink-3 truncate">{e.project_name || (e.ticket_id ? `Заявка #${e.ticket_id} ${e.ticket_title}` : 'Без проекта')}{e.task_title ? ` · ${e.task_title}` : ''}{!who ? ` · ${e.user_name}` : ''}</div>
+                    <div className="text-[11.5px] text-ink-3 truncate">{e.project_name ? `${e.project_name}${e.project_deleted ? ' (удалён)' : ''}` : e.ticket_title ? `Заявка ${e.ticket_id ? `#${e.ticket_id} ` : ''}${e.ticket_title}${e.ticket_deleted ? ' (удалена)' : ''}` : 'Без проекта'}{e.task_title ? ` · ${e.task_title}${e.task_deleted ? ' (удалена)' : ''}` : ''}{!who ? ` · ${e.user_name}` : ''}</div>
                   </div>
                   <span className="text-[12px] text-ink-3 tabular hidden sm:block">{fmtTime(e.started_at)}–{e.ended_at ? fmtTime(e.ended_at) : 'сейчас'}</span>
                   <span className={cx('w-14 text-right tabular text-[13px] font-medium', !e.ended_at && 'text-violet')}>{fmtHM(e.ended_at ? e.live_sec : (now - new Date(e.started_at)) / 1000)}</span>

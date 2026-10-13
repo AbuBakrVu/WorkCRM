@@ -11,7 +11,7 @@ import { TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
 import { ChecklistBlock, SubtasksBlock, DepsBlock } from './TaskExtras';
 import { RecurrenceFields, recurrenceBody, ruleText } from './Recurrence';
-import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
+import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, HoursDeleteDialog, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
 import { HistoryPanel } from './History';
 
 const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
@@ -254,6 +254,7 @@ export function TaskDrawer({ id: rootId, onClose }) {
   const [t, setT] = useState(null);
   const [edit, setEdit] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
+  const [askDel, setAskDel] = useState(false);
   const now = useNow();
   const fileInput = useRef(null);
   useEffect(() => {
@@ -296,7 +297,9 @@ export function TaskDrawer({ id: rootId, onClose }) {
         <Popover align="right" width={210} trigger={({ toggle }) => <IconButton icon={MoreHorizontal} size={32} title="Ещё" onClick={toggle} />}>
           {({ close }) => (<>
             {perms.edit && <MenuItem icon={Pencil} onClick={() => { close(); setEdit(true); }}>Редактировать</MenuItem>}
-            {perms.del && <div className="px-1 pt-1"><ConfirmButton onConfirm={() => { close(); remove(); }}>Удалить задачу</ConfirmButton></div>}
+            {perms.del && <div className="px-1 pt-1">{t.tracked_sec
+              ? <Button variant="danger" size="sm" onClick={() => { close(); setAskDel(true); }}>Удалить задачу</Button>
+              : <ConfirmButton onConfirm={() => { close(); remove(); }}>Удалить задачу</ConfirmButton>}</div>}
           </>)}
         </Popover>
       )}>
@@ -390,6 +393,8 @@ export function TaskDrawer({ id: rootId, onClose }) {
         </div>
       )}
       <TaskFormModal open={edit} task={t} onClose={() => setEdit(false)} onSaved={setT} />
+      <HoursDeleteDialog open={askDel} onClose={() => setAskDel(false)} trackedSec={t?.tracked_sec} what="задачу" onConfirm={remove}
+        hint="Если задача просто не нужна — лучше закрыть её: время и итог работ останутся привязаны к задаче." />
     </Drawer>
   );
 }
