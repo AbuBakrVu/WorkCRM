@@ -10,7 +10,7 @@ import { TASK_STATUS, TASK_FILTERS } from '../lib/constants';
 import { fmtDate, fmtHM, todayStr, timeAgo } from '../lib/format';
 import { Button, IconButton, Tabs, Popover, MenuItem, AvatarStack, Card, Empty, Spinner, cx, Avatar, Segmented, SearchList, userOptions, nameOptions } from '../components/ui';
 import { ProjectFormModal } from '../components/ProjectForm';
-import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskStatusPill, TaskWorkActions, isOverdue } from '../components/Tasks';
+import { TaskFormModal, TaskDrawer, TaskStatusIcon, TaskWorkActions, isOverdue } from '../components/Tasks';
 import { RecurrenceList } from '../components/Recurrence';
 import { SavedViews } from '../components/SavedViews';
 import { ImportModal } from '../components/Import';
@@ -305,48 +305,52 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
               <Button size="sm" variant="primary" icon={Plus} onClick={onAddTask}>Добавить задачу</Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="p-3 pb-0">
+              <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="w-full task-grid">
                 <thead>
-                  <tr className="bg-canvas/60 border-b border-line">
+                  <tr className="bg-canvas/70 border-b border-line">
                     <th className="th w-10" />
-                    <th className="th min-w-[300px]">Задача</th>
-                    <th className="th">Статус</th>
-                    <th className="th">Исполнитель</th>
-                    <th className="th">Срок</th>
-                    <th className="th">Создана</th>
-                    <th className="th text-right">Работа</th>
+                    <th className="th w-[96px]">Исполнители</th>
+                    <th className="th min-w-[280px]">Задача</th>
+                    <th className="th w-[140px]">Статус</th>
+                    <th className="th w-[150px]">Прогресс</th>
+                    <th className="th w-[110px]">Срок</th>
+                    <th className="th w-[110px]" title="Учтено времени по задаче">Время</th>
+                    <th className="th w-[1%] text-center">Работа</th>
                   </tr>
                 </thead>
                 <tbody className="stagger">
                   {nestTasks(tasks).map((t) => {
                     const late = isOverdue(t);
-                    const a = userMap[t.assignee_id];
+                    const people = [t.assignee_id, ...(t.coassignee_ids || [])].map((id) => userMap[id]).filter(Boolean);
                     return (
                       <tr key={t.id} onClick={() => onOpenTask(t.id)} className="border-b border-line last:border-0 hover:bg-canvas/50 cursor-pointer">
                         <td className="td pr-0"><TaskStatusIcon status={t.status} /></td>
-                        <td className="td whitespace-normal">
+                        <td className="td"><AvatarStack users={people} max={3} size={24} /></td>
+                        <td className="td whitespace-normal" title={`Создана ${timeAgo(t.created_at)}`}>
                           <div className={cx(t._child && 'pl-5 relative before:absolute before:left-1.5 before:top-0 before:h-3 before:w-2.5 before:border-l-2 before:border-b-2 before:border-line-strong before:rounded-bl-md')}>
                           <div className={cx('text-[13.5px] font-[450]', t.status === 'done' ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</div>
                           {t.description && <div className="text-[12px] text-ink-3 line-clamp-1 max-w-[560px]">{t.description}</div>}
                           <TaskMeta t={t} />
                           </div>
                         </td>
-                        <td className="td"><TaskStatusPill status={t.status} /></td>
-                        <td className="td">
-                          <span className="flex items-center gap-2">{a ? <><Avatar user={a} size={22} ring={false} />{a.name.split(' ')[0]}</> : <span className="text-ink-3">—</span>}</span>
-                        </td>
+                        <td className="td"><GridStatus t={t} late={late} /></td>
+                        <td className="td"><GridProgress t={t} late={late} /></td>
                         <td className={cx('td', late && 'text-red-600 font-medium')}>
                           {t.due_date ? <span className="inline-flex items-center gap-1.5"><Calendar size={13} className={late ? '' : 'text-ink-3'} />{fmtDate(t.due_date)}</span> : <span className="text-ink-3">—</span>}
                         </td>
-                        <td className="td text-ink-3 text-[12px]">{timeAgo(t.created_at)}</td>
+                        <td className="td">
+                          <span className={cx('inline-flex items-center gap-1.5 tabular', !t.tracked_sec && 'text-ink-3')}><Clock size={13} className="text-ink-3" />{t.tracked_sec ? `${fmtHM(t.tracked_sec)} ч` : '—'}</span>
+                        </td>
                         <td className="td text-right"><TaskWorkActions task={t} /></td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <button onClick={onAddTask} className="w-full flex items-center gap-2 px-5 h-11 text-[13px] text-ink-3 hover:text-ink hover:bg-canvas/50 border-t border-line rounded-b-2xl">
+              </div>
+              <button onClick={onAddTask} className="w-full flex items-center gap-2 px-2 h-11 text-[13px] text-ink-3 hover:text-ink">
                 <Plus size={15} />Новая задача
               </button>
             </div>
@@ -354,6 +358,31 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
         </div>
       )}
     </section>
+  );
+}
+
+// Статус в стиле таблицы: цветной квадрат + подпись; просроченная — красным
+function GridStatus({ t, late }) {
+  const s = TASK_STATUS[t.status];
+  const color = late ? 'var(--color-st-stuck)' : s.color;
+  return (
+    <span className="inline-flex items-center gap-2 text-[13px] text-ink">
+      <span className="size-3 rounded-[4px]" style={{ background: color }} />{late ? 'Просрочена' : s.label}
+    </span>
+  );
+}
+
+// Прогресс: закрыта — 100%, иначе доля выполненных пунктов чек-листа и подзадач
+function GridProgress({ t, late }) {
+  const total = (t.check_total || 0) + (t.sub_total || 0);
+  const pct = t.status === 'done' ? 100 : total ? Math.round((((t.check_done || 0) + (t.sub_done || 0)) / total) * 100) : 0;
+  const color = t.status === 'done' ? 'var(--color-st-done)' : late ? 'var(--color-st-stuck)' : t.status === 'in_progress' ? 'var(--color-st-progress)' : 'var(--color-st-review)';
+  const hint = t.status === 'done' ? 'Задача закрыта' : total ? `Выполнено пунктов: ${(t.check_done || 0) + (t.sub_done || 0)} из ${total}` : 'Нет чек-листа и подзадач';
+  return (
+    <div className="flex items-center gap-2.5" title={hint}>
+      <div className="w-[72px] h-1.5 rounded-full bg-line overflow-hidden"><div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, background: color }} /></div>
+      <span className="text-[12px] text-ink-2 tabular w-9 text-right">{pct}%</span>
+    </div>
   );
 }
 

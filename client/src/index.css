@@ -226,3 +226,7 @@ select.input { @apply pr-8 appearance-none bg-no-repeat;
 html.dark .sb { box-shadow: 0 24px 60px rgb(0 0 0 / .45); }
 html.dark .sb-action.on { color: #fff; }
 .sb-theme .sun { display: none } html.dark .sb-theme .sun { display: block } html.dark .sb-theme .moon { display: none }
+
+/* Таблица задач в проекте: вертикальные разделители колонок, как в сетке */
+.task-grid th + th, .task-grid td + td { border-left: 1px solid var(--color-line); }
+.task-grid th:nth-child(2), .task-grid td:nth-child(2) { border-left: 0; }
