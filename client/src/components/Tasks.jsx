@@ -43,7 +43,7 @@ function WorkClockChip({ timer }) {
 }
 
 // Кнопки работы с задачей прямо в списке: «Взять в работу» → время → «Приостановить» / «Закрыть»
-export function TaskWorkActions({ task: t, onStarted }) {
+export function TaskWorkActions({ task: t, onStarted, compact }) {
   const { user, timer, startWork, askWork } = useApp();
   if (!taskPerms(user, t).status || t.status === 'done') return null;
   const timerHere = timer && timer.task_id === t.id;
@@ -54,17 +54,17 @@ export function TaskWorkActions({ task: t, onStarted }) {
   }
   if (t.status === 'todo') {
     return (
-      <button onClick={start} className="inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-brand text-white text-[12.5px] font-semibold hover:bg-brand-strong transition-colors whitespace-nowrap">
-        <Play size={12} fill="currentColor" />Взять в работу
+      <button onClick={start} className={cx('inline-flex items-center gap-1.5 pl-2.5 pr-3 rounded-full bg-brand text-white font-semibold hover:bg-brand-strong transition-colors whitespace-nowrap', compact ? 'h-6 text-[11.5px] pl-2 pr-2.5' : 'h-8 text-[12.5px]')}>
+        <Play size={compact ? 10 : 12} fill="currentColor" />Взять в работу
       </button>
     );
   }
   return (
     <div className="inline-flex items-center gap-1.5" onClick={stop}>
       {timerHere ? <WorkClockChip timer={timer} />
-        : <button onClick={start} title="Продолжить работу (запустить время)" className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full border border-brand/40 text-brand text-[12px] font-semibold hover:bg-brand/5"><Play size={11} fill="currentColor" />Продолжить</button>}
-      <button onClick={() => askWork(t, 'pause')} title="Приостановить (с отчётом)" className="size-8 rounded-full border border-line hover:bg-amber-50 hover:border-amber-300 text-amber-600 flex items-center justify-center"><PauseCircle size={16} /></button>
-      <button onClick={() => askWork(t, 'close')} title="Закрыть задачу (с итогом)" className="size-8 rounded-full border border-line hover:bg-brand/5 hover:border-brand/40 text-brand flex items-center justify-center"><CheckCircle2 size={16} /></button>
+        : <button onClick={start} title="Продолжить работу (запустить время)" className={cx('inline-flex items-center gap-1 rounded-full border border-brand/40 text-brand font-semibold hover:bg-brand/5', compact ? 'h-6 px-2 text-[11.5px]' : 'h-7 px-2.5 text-[12px]')}><Play size={compact ? 10 : 11} fill="currentColor" />Продолжить</button>}
+      <button onClick={() => askWork(t, 'pause')} title="Приостановить (с отчётом)" className={cx(compact ? 'size-6' : 'size-8', 'rounded-full border border-line hover:bg-amber-50 hover:border-amber-300 text-amber-600 flex items-center justify-center')}><PauseCircle size={compact ? 13 : 16} /></button>
+      <button onClick={() => askWork(t, 'close')} title="Закрыть задачу (с итогом)" className={cx(compact ? 'size-6' : 'size-8', 'rounded-full border border-line hover:bg-brand/5 hover:border-brand/40 text-brand flex items-center justify-center')}><CheckCircle2 size={compact ? 13 : 16} /></button>
     </div>
   );
 }
