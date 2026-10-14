@@ -309,10 +309,10 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
               <div className="overflow-x-auto rounded-xl border border-line">
               <table className="w-full task-grid">
                 <thead>
-                  <tr className="bg-canvas/70 border-b border-line [&>th]:py-2 [&>th]:text-[12px]">
+                  <tr className="bg-canvas/70 border-b border-line">
                     <th className="th w-10" />
                     <th className="th w-[96px]">Исполнители</th>
-                    <th className="th min-w-[320px]">Задача</th>
+                    <th className="th min-w-[280px]">Задача</th>
                     <th className="th w-[140px]">Статус</th>
                     <th className="th w-[150px]">Прогресс</th>
                     <th className="th w-[110px]">Срок</th>
@@ -325,25 +325,25 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
                     const late = isOverdue(t);
                     const people = [t.assignee_id, ...(t.coassignee_ids || [])].map((id) => userMap[id]).filter(Boolean);
                     return (
-                      <tr key={t.id} onClick={() => onOpenTask(t.id)} className="border-b border-line last:border-0 hover:bg-canvas/50 cursor-pointer [&>td]:text-[12.5px]">
-                        <td className="td py-1 pr-0"><TaskStatusIcon status={t.status} size={15} /></td>
-                        <td className="td py-1"><AvatarStack users={people} max={3} size={20} /></td>
-                        <td className="td py-1 max-w-0 w-full" title={`${t.title}${t.description ? `\n${t.description}` : ''}\nСоздана ${timeAgo(t.created_at)}`}>
-                          <div className={cx('flex items-center gap-2 min-w-0', t._child && 'pl-5 relative before:absolute before:left-1.5 before:-top-2 before:h-[18px] before:w-2.5 before:border-l-2 before:border-b-2 before:border-line-strong before:rounded-bl-md')}>
-                            <span className={cx('text-[13px] font-[450] truncate shrink-0 max-w-[65%]', t.status === 'done' ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</span>
-                            {t.description && <span className="text-[12px] text-ink-3 truncate flex-1 min-w-0">{t.description}</span>}
-                            <TaskMeta t={t} />
+                      <tr key={t.id} onClick={() => onOpenTask(t.id)} className="border-b border-line last:border-0 hover:bg-canvas/50 cursor-pointer">
+                        <td className="td pr-0"><TaskStatusIcon status={t.status} /></td>
+                        <td className="td"><AvatarStack users={people} max={3} size={24} /></td>
+                        <td className="td whitespace-normal" title={`Создана ${timeAgo(t.created_at)}`}>
+                          <div className={cx(t._child && 'pl-5 relative before:absolute before:left-1.5 before:top-0 before:h-3 before:w-2.5 before:border-l-2 before:border-b-2 before:border-line-strong before:rounded-bl-md')}>
+                          <div className={cx('text-[13.5px] font-[450]', t.status === 'done' ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</div>
+                          {t.description && <div className="text-[12px] text-ink-3 line-clamp-1 max-w-[560px]">{t.description}</div>}
+                          <TaskMeta t={t} />
                           </div>
                         </td>
-                        <td className="td py-1"><GridStatus t={t} late={late} /></td>
-                        <td className="td py-1"><GridProgress t={t} late={late} /></td>
-                        <td className={cx('td py-1', late && 'text-red-600 font-medium')}>
+                        <td className="td"><GridStatus t={t} late={late} /></td>
+                        <td className="td"><GridProgress t={t} late={late} /></td>
+                        <td className={cx('td', late && 'text-red-600 font-medium')}>
                           {t.due_date ? <span className="inline-flex items-center gap-1.5"><Calendar size={13} className={late ? '' : 'text-ink-3'} />{fmtDate(t.due_date)}</span> : <span className="text-ink-3">—</span>}
                         </td>
-                        <td className="td py-1">
+                        <td className="td">
                           <span className={cx('inline-flex items-center gap-1.5 tabular', !t.tracked_sec && 'text-ink-3')}><Clock size={13} className="text-ink-3" />{t.tracked_sec ? `${fmtHM(t.tracked_sec)} ч` : '—'}</span>
                         </td>
-                        <td className="td py-1 text-right"><TaskWorkActions task={t} compact /></td>
+                        <td className="td text-right"><TaskWorkActions task={t} /></td>
                       </tr>
                     );
                   })}
@@ -366,8 +366,8 @@ function GridStatus({ t, late }) {
   const s = TASK_STATUS[t.status];
   const color = late ? 'var(--color-st-stuck)' : s.color;
   return (
-    <span className="inline-flex items-center gap-2 text-[12.5px] text-ink">
-      <span className="size-2.5 rounded-[3px]" style={{ background: color }} />{late ? 'Просрочена' : s.label}
+    <span className="inline-flex items-center gap-2 text-[13px] text-ink">
+      <span className="size-3 rounded-[4px]" style={{ background: color }} />{late ? 'Просрочена' : s.label}
     </span>
   );
 }
@@ -406,7 +406,7 @@ function TaskMeta({ t }) {
   if (t.blocked_count > 0 && t.status !== 'done') items.push(<span key="b" className="inline-flex items-center gap-1 text-amber-600 font-medium" title="Ждёт закрытия других задач"><Lock size={12} />ждёт {t.blocked_count}</span>);
   if (t.parent_id && !t._child && t.parent_title) items.push(<span key="p" className="inline-flex items-center gap-1 truncate max-w-56"><CornerDownRight size={12} />{t.parent_title}</span>);
   if (t.recurrence_id) items.push(<span key="r" className="inline-flex items-center gap-1" title="Повторяющаяся задача"><Repeat size={12} /></span>);
-  return items.length ? <div className="flex items-center gap-x-3 shrink-0 whitespace-nowrap text-[11.5px] text-ink-3">{items}</div> : null;
+  return items.length ? <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11.5px] text-ink-3">{items}</div> : null;
 }
 
 function Counter({ label, n, dot, tone }) {
