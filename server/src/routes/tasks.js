@@ -43,14 +43,14 @@ function taskPerms(user, t) {
 
 const userName = (uid) => get('SELECT name FROM users WHERE id = ?', uid)?.name || 'сотрудник';
 // Синхронизация соисполнителей/наблюдателей + системные сообщения в чат
-function setTaskMembers(taskId, role, list, actorId) {
+function setTaskMembers(taskId, role, list, actorId, silent = false) {
   if (!Array.isArray(list)) return;
   const next = new Set(list.map(Number).filter(Boolean));
   const cur = new Set(all('SELECT user_id FROM task_members WHERE task_id = ? AND role = ?', taskId, role).map((r) => r.user_id));
   const label = role === 'observer' ? 'наблюдателя' : 'соисполнителя';
   for (const uid of next) if (!cur.has(uid)) {
     run('INSERT OR IGNORE INTO task_members (task_id, user_id, role) VALUES (?,?,?)', taskId, uid, role);
-    systemComment(taskId, actorId, `добавил ${label}: ${userName(uid)}`);
+    if (!silent) systemComment(taskId, actorId, `добавил ${label}: ${userName(uid)}`);
   }
   for (const uid of cur) if (!next.has(uid)) {
     run('DELETE FROM task_members WHERE task_id = ? AND user_id = ? AND role = ?', taskId, uid, role);
@@ -82,6 +82,12 @@ function taskDetails(t) {
     blocks: all(`SELECT b.id, b.title, b.status FROM task_deps d JOIN tasks b ON b.id = d.task_id WHERE d.blocked_by_id = ? ORDER BY b.id`, t.id),
   };
 }
+// Крайний срок — настоящая дата YYYY-MM-DD с годом 2000–2100 (защита от «0002» при наборе года)
+function checkDue(d) {
+  if (d == null || d === '') return;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d));
+  if (!m || +m[1] < 2000 || +m[1] > 2100 || Number.isNaN(Date.parse(d))) throw bad('Некорректная дата крайнего срока');
+}
 // Родитель подзадачи: из того же проекта, не сама задача и без циклов
 function checkParent(taskId, parentId, projectId) {
   if (!parentId) return;
@@ -94,14 +100,15 @@ function checkParent(taskId, parentId, projectId) {
 api.post('/tasks', wrap((req) => {
   const data = pick(req.body, TASK_FIELDS);
   required(data, 'project_id', 'title');
+  checkDue(data.due_date);
   checkParent(null, data.parent_id, data.project_id);
   data.created_by = req.user.id;
   if (data.status === 'done') data.completed_at = nowIso();
   const id = tx(() => {
     const id = insert('tasks', data);
     systemComment(id, req.user.id, 'создал задачу');
-    setTaskMembers(id, 'coassignee', req.body.coassignee_ids, req.user.id);
-    setTaskMembers(id, 'observer', req.body.observer_ids, req.user.id);
+    setTaskMembers(id, 'coassignee', req.body.coassignee_ids, req.user.id, true);
+    setTaskMembers(id, 'observer', req.body.observer_ids, req.user.id, true);
     if (Array.isArray(req.body.checklist)) req.body.checklist.map((x) => String(x || '').trim()).filter(Boolean)
       .forEach((text, i) => insert('task_checklist', { task_id: id, position: i, text: text.slice(0, 500) }));
     if (data.parent_id) systemComment(data.parent_id, req.user.id, `добавил подзадачу «${data.title}»`);
@@ -121,6 +128,7 @@ api.put('/tasks/:id', wrap((req) => {
   const before = getTask(id);
   if (!before) throw notFound();
   const data = pick(req.body, TASK_FIELDS);
+  if ('due_date' in data) checkDue(data.due_date);
   const perms = taskPerms(req.user, before);
   if ('parent_id' in data) checkParent(id, data.parent_id, data.project_id ?? before.project_id);
   const statusChange = data.status && data.status !== before.status;
@@ -395,7 +403,24 @@ export const purgeNotifications = () => run("DELETE FROM notifications WHERE rea
 /* ---------- комментарии к задачам (чат) ---------- */
 const COMMENT_SELECT = `SELECT c.*, u.name user_name, u.color user_color, f.name file_name, f.size file_size, f.mime file_mime
   FROM task_comments c LEFT JOIN users u ON u.id = c.user_id LEFT JOIN files f ON f.id = c.file_id`;
+// Повторные правки одного поля подряд (тот же сотрудник, в пределах 10 минут) не плодят строки
+// в чате: последнее системное сообщение о том же поле заменяется новым.
+const MERGE_KEYS = [
+  ['due', /^(изменил крайний срок|убрал крайний срок)/],
+  ['assignee', /^(назначил исполнителя|снял исполнителя)/],
+  ['descr', /^изменил описание задачи/],
+];
+const mergeKey = (body) => MERGE_KEYS.find(([, re]) => re.test(body))?.[0];
 function systemComment(taskId, userId, body) {
+  const key = mergeKey(body);
+  if (key) {
+    const last = get("SELECT id, user_id, kind, body, created_at FROM task_comments WHERE task_id = ? ORDER BY id DESC LIMIT 1", taskId);
+    const age = last && Date.now() - Date.parse(String(last.created_at).replace(' ', 'T') + (/[Zz]|[+-]\d\d:?\d\d$/.test(last.created_at) ? '' : 'Z'));
+    if (last && last.kind === 'system' && last.user_id === userId && mergeKey(last.body) === key && age >= 0 && age < 10 * 60e3) {
+      run('UPDATE task_comments SET body = ? WHERE id = ?', body, last.id);
+      return;
+    }
+  }
   run("INSERT INTO task_comments (task_id, user_id, kind, body) VALUES (?, ?, 'system', ?)", taskId, userId, body);
 }
 

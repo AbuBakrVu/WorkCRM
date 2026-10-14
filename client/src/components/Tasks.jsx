@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2, Circle, CircleDot, Play, Pencil, Calendar, Clock, FolderOpen, Send, Trash2, MessageSquare, Paperclip, FileText,
-  Download, MoreHorizontal, Plus, X, Users, RotateCcw, PauseCircle, Lock, ChevronDown, Repeat,
+  Download, MoreHorizontal, Plus, X, Users, RotateCcw, PauseCircle, Lock, ChevronDown, Repeat, History,
 } from 'lucide-react';
 import { useApp, useLoad, useNow, timerSeconds } from '../lib/store';
 import { taskPerms } from '../lib/perms';
@@ -153,7 +153,7 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
           <Field label="Исполнитель">
             <Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" search options={userOptions(users)} />
           </Field>
-          {f.repeat ? <div /> : <Field label="Крайний срок"><input type="date" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>}
+          {f.repeat ? <div /> : <Field label="Крайний срок"><input type="date" min="2000-01-01" max="2100-12-31" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>}
           <Field label="Соисполнители"><UserPicker users={users} value={f.coassignee_ids || []} onChange={set('coassignee_ids')} /></Field>
           <Field label="Наблюдатели"><UserPicker users={users} value={f.observer_ids || []} onChange={set('observer_ids')} /></Field>
         </div>
@@ -179,6 +179,32 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
 }
 
 /* ---------- Карточка задачи: слева информация, справа обсуждение (в стиле CRM) ---------- */
+// Поле даты, которое сохраняет только готовую дату: пока год набирается с клавиатуры
+// («0002» → «0020» → «2026»), промежуточные значения не уходят на сервер.
+const fullDate = (v) => /^(\d{4})-\d{2}-\d{2}$/.test(v) && +v.slice(0, 4) >= 2000 && +v.slice(0, 4) <= 2100;
+function DueDateInput({ value, onSave, className }) {
+  const [v, setV] = useState(value || '');
+  useEffect(() => { setV(value || ''); }, [value]);
+  const commit = (next) => {
+    const out = next || null;
+    if ((out ?? null) === (value ?? null)) return;
+    if (out && !fullDate(out)) { setV(value || ''); return; }
+    onSave(out);
+  };
+  return (
+    <input type="date" min="2000-01-01" max="2100-12-31" value={v} className={className}
+      onChange={(e) => {
+        const n = e.target.value;
+        setV(n);
+        // готовая дата (выбор в календаре или дописанный год) — сохраняем сразу;
+        // очистка и неполный ввод — только при уходе с поля
+        if (fullDate(n)) commit(n);
+      }}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+  );
+}
+
 function overdueText(due) {
   const days = Math.round((new Date(todayStr()) - new Date(due)) / 864e5);
   if (days < 1) return null;
@@ -336,8 +362,7 @@ export function TaskDrawer({ id: rootId, onClose }) {
                 <Row label="Крайний срок">
                   <div className="flex flex-wrap items-center gap-2">
                     {perms.edit ? (
-                      <input type="date" value={t.due_date || ''} onChange={(e) => patch({ due_date: e.target.value || null })}
-                        className={cx('input !h-8 !w-auto !rounded-full', late && '!text-red-600 !border-red-300')} />
+                      <DueDateInput value={t.due_date} onSave={(v) => patch({ due_date: v })} className={cx('input !h-8 !w-auto !rounded-full', late && '!text-red-600 !border-red-300')} />
                     ) : <span className={cx('text-[13px]', late ? 'text-red-600 font-medium' : 'text-ink')}>{t.due_date ? fmtDate(t.due_date, true) : 'Не указан'}</span>}
                     {late && <Pill color="#b91c1c" bg="#fee2e2">{late}</Pill>}
                   </div>
@@ -471,6 +496,25 @@ export function TaskChat({ taskId, participants = [] }) {
   const stick = useRef(true);
   const serverLast = useRef(0); // последний id, полученный с сервера (свои отправленные его не двигают)
 
+  // Серии из 4+ системных событий подряд сворачиваются: видны 2 последних и кнопка «Ещё N событий»
+  const [openRuns, setOpenRuns] = useState(() => new Set());
+  const fold = useMemo(() => {
+    const m = new Map();
+    if (!items) return m;
+    const isSys = (c) => c.kind === 'system' && !c.report;
+    const day = (c) => toDateStr(parseDate(c.created_at));
+    for (let i = 0; i < items.length;) {
+      if (!isSys(items[i])) { i++; continue; }
+      let j = i;
+      while (j + 1 < items.length && isSys(items[j + 1]) && day(items[j + 1]) === day(items[i])) j++;
+      const len = j - i + 1;
+      if (len > 3 && !openRuns.has(items[i].id)) {
+        for (let k = i; k <= j - 2; k++) m.set(items[k].id, { hidden: true, start: k === i, count: len - 2 });
+      }
+      i = j + 1;
+    }
+    return m;
+  }, [items, openRuns]);
   const load = useCallback(async (full = false) => {
     const after = full ? 0 : serverLast.current;
     const fresh = await api.get(`/tasks/${taskId}/comments${after ? `?after=${after}` : ''}`);
@@ -489,7 +533,7 @@ export function TaskChat({ taskId, participants = [] }) {
     return () => clearInterval(t);
   }, [load]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (items) load().catch(() => {}); }, [version]);
+  useEffect(() => { if (items) load(true).catch(() => {}); }, [version]);
   const toBottom = () => { const el = listRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; };
   useLayoutEffect(toBottom, [items]);
 
@@ -554,6 +598,7 @@ export function TaskChat({ taskId, participants = [] }) {
             <div className="text-ink-3 text-[13px] mt-1 max-w-xs">Напишите сообщение — участники задачи увидят его здесь</div>
           </div>
         ) : items.map((c) => {
+          const f = fold.get(c.id);
           const d = parseDate(c.created_at);
           const day = toDateStr(d);
           const showDay = day !== prevDay;
@@ -569,7 +614,13 @@ export function TaskChat({ taskId, participants = [] }) {
                   <div className="flex-1 h-px bg-line" />
                 </div>
               )}
-              {c.report ? (
+              {f?.start && (
+                <button onClick={() => setOpenRuns((r) => new Set(r).add(c.id))}
+                  className="mx-auto my-2 flex items-center gap-1.5 h-7 px-3 rounded-full border border-line bg-panel text-[12px] text-ink-3 hover:text-ink hover:border-line-strong">
+                  <History size={12} />Ещё {f.count} {plural(f.count, 'событие', 'события', 'событий')}
+                </button>
+              )}
+              {f?.hidden ? null : c.report ? (
                 <div className="my-3 flex justify-center">
                   <div className={cx('w-full max-w-[560px] rounded-2xl border bg-panel overflow-hidden', c.report === 'close' ? 'border-brand/30' : 'border-amber-300/60')}>
                     <div className={cx('flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold', c.report === 'close' ? 'bg-brand/[.07] text-brand' : 'bg-amber-50 text-amber-700')}>
