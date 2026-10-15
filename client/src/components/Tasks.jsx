@@ -69,6 +69,94 @@ export function TaskWorkActions({ task: t, onStarted }) {
   );
 }
 
+/* ---------- Ручной учёт времени по задаче ---------- */
+// Окно «Добавить время»: дата, часы и минуты, что сделано; руководитель может записать время за сотрудника
+export function TaskTimeModal({ open, task, onClose, onSaved }) {
+  const { user, users, isManager, toast, bump } = useApp();
+  const [f, setF] = useState({});
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) setF({ date: todayStr(), hours: '1', minutes: '0', description: '', user_id: user.id }); }, [open, user.id]);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
+  const dur = Math.round((+f.hours || 0) * 3600 + (+f.minutes || 0) * 60);
+  const submit = async (e) => {
+    e?.preventDefault();
+    if (dur <= 0) return toast('Укажите, сколько времени затрачено', 'error');
+    if (dur > 24 * 3600) return toast('За один раз — не больше 24 часов', 'error');
+    if (!f.date || f.date > todayStr()) return toast('Дата не может быть в будущем', 'error');
+    // Сегодня — запись заканчивается «сейчас», за прошлые дни — начинается в 09:00
+    const start = f.date === todayStr() ? new Date(Date.now() - dur * 1000) : new Date(`${f.date}T09:00:00`);
+    setBusy(true);
+    try {
+      await api.post('/time', { task_id: task.id, project_id: task.project_id, user_id: +f.user_id || user.id,
+        description: f.description?.trim() || null, started_at: start.toISOString(), duration_sec: dur });
+      toast('Время добавлено'); bump(); onSaved?.(); onClose();
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
+  const quick = [[0, 15], [0, 30], [1, 0], [2, 0], [4, 0], [8, 0]];
+  return (
+    <Modal open={open} onClose={onClose} title="Добавить время" width={460}
+      footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit} disabled={busy}>Добавить</Button></>}>
+      <form onSubmit={submit} className="space-y-3.5">
+        <div className="text-[12.5px] text-ink-3 truncate">Задача: <span className="text-ink font-medium">{task?.title}</span></div>
+        {isManager && <Field label="Сотрудник"><Select value={f.user_id} onChange={set('user_id')} search options={userOptions(users)} /></Field>}
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Часы"><input type="number" min="0" max="24" className="input" value={f.hours ?? ''} onChange={set('hours')} autoFocus /></Field>
+          <Field label="Минуты"><input type="number" min="0" max="59" step="5" className="input" value={f.minutes ?? ''} onChange={set('minutes')} /></Field>
+          <Field label="Дата"><input type="date" max={todayStr()} className="input" value={f.date || ''} onChange={set('date')} /></Field>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {quick.map(([h, m]) => (
+            <button type="button" key={`${h}:${m}`} onClick={() => setF((x) => ({ ...x, hours: String(h), minutes: String(m) }))}
+              className={cx('h-7 px-2.5 rounded-full border text-[12px] tabular', +f.hours === h && +f.minutes === m ? 'border-brand bg-brand/10 text-brand font-semibold' : 'border-line text-ink-2 hover:border-line-strong')}>
+              {h ? `${h} ч` : ''}{h && m ? ' ' : ''}{m ? `${m} мин` : ''}
+            </button>
+          ))}
+        </div>
+        <Field label="Что сделано"><textarea rows={2} className="input !h-auto py-2" value={f.description || ''} onChange={set('description')} placeholder="Необязательно — попадёт в табель и в обсуждение задачи" /></Field>
+      </form>
+    </Modal>
+  );
+}
+
+// Записи времени по задаче: кто, когда, сколько; свои (или все — для руководителя) можно удалить
+function TaskTimeEntries({ taskId, tracked }) {
+  const { user, isManager, toast, bump, version } = useApp();
+  const [list, setList] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(null);
+  useEffect(() => { if (!armed) return; const x = setTimeout(() => setArmed(null), 3000); return () => clearTimeout(x); }, [armed]);
+  useEffect(() => { if (tracked > 0) api.get(`/time?task_id=${taskId}`).then(setList).catch(() => setList([])); else setList([]); }, [taskId, tracked, version]);
+  if (!list?.length) return null;
+  const del = async (e) => {
+    try { await api.del(`/time/${e.id}`); toast('Запись удалена'); bump(); } catch (err) { toast(err.message, 'error'); }
+  };
+  const shown = open ? list : list.slice(0, 3);
+  return (
+    <div className="mt-1 rounded-xl border border-line divide-y divide-line">
+      {shown.map((e) => (
+        <div key={e.id} className="group flex items-center gap-2.5 px-3 py-2 text-[12.5px]">
+          <Avatar user={{ name: e.user_name, color: e.user_color }} size={20} ring={false} />
+          <span className="text-ink-2 shrink-0">{fmtDate(toDateStr(parseDate(e.started_at)))}</span>
+          <span className="text-ink-3 truncate flex-1 min-w-0">{e.description || (e.ended_at ? '' : 'идёт таймер')}</span>
+          <span className="font-semibold text-ink tabular shrink-0">{fmtHM(e.live_sec ?? e.duration_sec)} ч</span>
+          {e.ended_at && (isManager || e.user_id === user.id) ? (
+            <button onClick={() => (armed === e.id ? del(e) : setArmed(e.id))} title={armed === e.id ? 'Нажмите ещё раз, чтобы удалить' : 'Удалить запись'}
+              className={cx('h-6 rounded-full flex items-center justify-center gap-1 text-[11.5px] transition-opacity',
+                armed === e.id ? 'px-2 bg-red-50 text-red-600 font-medium' : 'w-6 text-ink-3 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus:opacity-100')}>
+              <Trash2 size={13} />{armed === e.id && 'Удалить?'}
+            </button>
+          ) : <span className="size-6" />}
+        </div>
+      ))}
+      {list.length > 3 && (
+        <button onClick={() => setOpen((v) => !v)} className="w-full px-3 h-8 text-[12px] text-ink-3 hover:text-ink text-left">
+          {open ? 'Свернуть' : `Показать все записи (${list.length})`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Создание / редактирование задачи ---------- */
 export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
   const { users, projects, toast, bump } = useApp();
@@ -278,6 +366,7 @@ export function TaskDrawer({ id: rootId, onClose }) {
   useEffect(() => { setId(rootId); }, [rootId]);
   const { user, users, toast, bump, pauseTimer, resumeTimer, timer, version, startWork, askWork } = useApp();
   const [t, setT] = useState(null);
+  const [addTime, setAddTime] = useState(false);
   const [edit, setEdit] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
   const [askDel, setAskDel] = useState(false);
@@ -369,8 +458,17 @@ export function TaskDrawer({ id: rootId, onClose }) {
                 </Row>
                 <Row label="Создана"><span className="text-[13px] text-ink">{fmtDateTime(t.created_at)}</span></Row>
                 {t.completed_at && <Row label="Закрыта"><span className="text-[13px] text-ink">{fmtDateTime(t.completed_at)}</span></Row>}
-                <Row label="Затрачено"><span className="inline-flex items-center gap-1.5 text-[13px] text-ink tabular"><Clock size={14} className="text-ink-3" />{fmtHM(t.tracked_sec)} ч</span></Row>
+                <Row label="Затрачено">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[13px] text-ink tabular"><Clock size={14} className="text-ink-3" />{fmtHM(t.tracked_sec)} ч</span>
+                    <button onClick={() => setAddTime(true)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full border border-dashed border-line-strong text-[12px] text-ink-2 hover:text-ink hover:border-brand/50 hover:bg-brand/5">
+                      <Plus size={13} />Добавить время
+                    </button>
+                  </div>
+                </Row>
+                <TaskTimeEntries taskId={t.id} tracked={t.tracked_sec} />
               </Section>
+              <TaskTimeModal open={addTime} task={t} onClose={() => setAddTime(false)} onSaved={() => api.get(`/tasks/${id}`).then(setT)} />
 
               <Section title={`Файлы${t.files_count ? ` · ${t.files_count}` : ''}`} icon={Paperclip}
                 action={t.status !== 'done' && <>

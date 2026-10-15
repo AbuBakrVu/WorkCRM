@@ -40,6 +40,7 @@ api.get('/time', wrap((req) => {
   if (to) { where.push('e.started_at < ?'); params.push(to); }
   if (req.query.user_id) { where.push('e.user_id = ?'); params.push(Number(req.query.user_id)); }
   if (req.query.project_id) { where.push('e.project_id = ?'); params.push(Number(req.query.project_id)); }
+  if (req.query.task_id) { where.push('e.task_id = ?'); params.push(Number(req.query.task_id)); }
   return all(`${TIME_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY e.started_at DESC LIMIT 1000`, ...params);
 }));
 
@@ -101,9 +102,26 @@ api.post('/time', wrap((req) => {
   data.duration_sec = Math.max(0, Math.round(Number(data.duration_sec)));
   const start = new Date(data.started_at);
   if (isNaN(start)) throw bad('Неверная дата');
+  if (data.duration_sec <= 0) throw bad('Укажите длительность');
+  if (data.duration_sec > 24 * 3600) throw bad('За один раз можно добавить не больше 24 часов');
   data.started_at = start.toISOString();
   data.ended_at = new Date(start.getTime() + data.duration_sec * 1000).toISOString();
-  const id = insert('time_entries', data);
+  // Время на задачу — проект берём из задачи
+  const task = data.task_id ? get('SELECT id, project_id FROM tasks WHERE id = ?', Number(data.task_id)) : null;
+  if (data.task_id && !task) throw notFound();
+  if (task && !data.project_id) data.project_id = task.project_id;
+  const id = tx(() => {
+    const id = insert('time_entries', data);
+    // Отметка в обсуждении задачи: кто и сколько добавил вручную
+    if (task) {
+      const h = Math.floor(data.duration_sec / 3600), m = Math.round((data.duration_sec % 3600) / 60);
+      const who = data.user_id !== req.user.id ? ` за ${get('SELECT name FROM users WHERE id = ?', data.user_id)?.name || 'сотрудника'}` : '';
+      const note = String(data.description || '').trim().slice(0, 300);
+      run("INSERT INTO task_comments (task_id, user_id, kind, body) VALUES (?, ?, 'system', ?)", task.id, req.user.id,
+        `добавил время вручную${who}: ${h}:${String(m).padStart(2, '0')} ч${note ? ` — ${note}` : ''}`);
+    }
+    return id;
+  });
   return get(`${TIME_SELECT} WHERE e.id = ?`, id);
 }));
 
