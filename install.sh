@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Установка CRM на сервер: спрашивает домен и данные администратора, запускает в Docker.
+# Установка CRM на сервер: спрашивает режим (интернет/внутренняя сеть) и данные администратора, запускает в Docker.
 # Повторный запуск безопасен: данные в ./data сохраняются, можно сбросить пароль администратора.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -28,17 +28,43 @@ DOCKER="docker"
 if ! docker info >/dev/null 2>&1; then DOCKER="sudo docker"; fi
 compose() { $DOCKER compose "$@"; }
 
-# ---------- Домен ----------
-echo
-bold "1. Адрес"
-echo "Если у вас есть домен (A-запись указывает на этот сервер) — введите его, будет HTTPS."
-echo "Оставьте пустым, чтобы открыть CRM по IP: http://IP:3000 (без HTTPS)."
-DOMAIN=$(ask "Домен (например crm.example.ru): ")
-DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN%%/*}"
+# ---------- Адрес ----------
+local_ip() {
+  ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<NF;i++) if($i=="src"){print $(i+1); exit}}' \
+    || true
+}
+port_busy() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q .; }
 
-if [[ -n "$DOMAIN" ]]; then
-  BIND="127.0.0.1"; COOKIE_SECURE="true"
+echo
+bold "1. Где будет работать CRM"
+echo "  1) Интернет — свой домен с HTTPS (A-запись домена указывает на этот сервер)"
+echo "  2) Внутренняя сеть — по IP или локальному имени, без HTTPS"
+MODE=$(ask "Выберите [1/2]: ")
+while ! [[ "$MODE" =~ ^[12]$ ]]; do MODE=$(ask "Введите 1 или 2: "); done
+
+DOMAIN=""; LOCAL_NAME=""
+LAN_IP=$(local_ip); [[ -z "$LAN_IP" ]] && LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+
+if [[ "$MODE" == 1 ]]; then
+  DOMAIN=$(ask "Домен (например crm.example.ru): ")
+  DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN%%/*}"
+  while [[ -z "$DOMAIN" ]]; do DOMAIN=$(ask "Домен не может быть пустым: "); done
+  BIND="127.0.0.1"; COOKIE_SECURE="true"; HTTP_PORT=3000
 else
+  echo "IP этого сервера в локальной сети: ${LAN_IP:-не определён}"
+  echo "Можно задать локальное имя (например crm.local) — тогда добавьте во внутренний DNS"
+  echo "(MikroTik: IP → DNS → Static) запись: имя → ${LAN_IP:-IP сервера}. Пусто — только по IP."
+  LOCAL_NAME=$(ask "Локальное имя (необязательно): ")
+  LOCAL_NAME="${LOCAL_NAME#http://}"; LOCAL_NAME="${LOCAL_NAME%%/*}"
+  HTTP_PORT=$(ask "Порт [80]: "); HTTP_PORT="${HTTP_PORT:-80}"
+  while ! [[ "$HTTP_PORT" =~ ^[0-9]+$ ]] || (( HTTP_PORT < 1 || HTTP_PORT > 65535 )); do
+    HTTP_PORT=$(ask "Некорректный порт. Порт [80]: "); HTTP_PORT="${HTTP_PORT:-80}"
+  done
+  # порт может быть занят самой CRM при повторной установке — это нормально
+  if port_busy "$HTTP_PORT" && ! $DOCKER ps --format '{{.Names}}' 2>/dev/null | grep -qx crm; then
+    err "Порт $HTTP_PORT уже занят другой программой (sudo ss -ltnp | grep :$HTTP_PORT)."
+    HTTP_PORT=$(ask "Другой порт [3000]: "); HTTP_PORT="${HTTP_PORT:-3000}"
+  fi
   BIND="0.0.0.0"; COOKIE_SECURE="false"
 fi
 
@@ -68,8 +94,10 @@ bold "3. Запуск"
 cat > .env <<EOF
 # Создано install.sh $(date '+%Y-%m-%d %H:%M')
 BIND=$BIND
+HTTP_PORT=$HTTP_PORT
 COOKIE_SECURE=$COOKIE_SECURE
 DOMAIN=$DOMAIN
+LOCAL_NAME=$LOCAL_NAME
 EOF
 chmod 600 .env
 mkdir -p data
@@ -80,7 +108,7 @@ compose up -d --build
 
 printf 'Ожидаю запуск'
 for i in $(seq 1 60); do
-  if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then echo; ok "Сервер запущен"; break; fi
+  if curl -fsS "http://127.0.0.1:$HTTP_PORT/api/health" >/dev/null 2>&1; then echo; ok "Сервер запущен"; break; fi
   printf '.'; sleep 1
   if (( i == 60 )); then echo; err "Сервер не ответил. Логи:"; compose logs --tail=60 crm; exit 1; fi
 done
@@ -112,8 +140,13 @@ if [[ -n "$DOMAIN" ]]; then
     URL="https://$DOMAIN (после настройки HTTPS)"
   fi
 else
-  IP=$(curl -fsS https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
-  URL="http://$IP:3000"
+  SUFFIX=""; [[ "$HTTP_PORT" != 80 ]] && SUFFIX=":$HTTP_PORT"
+  URL="http://${LAN_IP:-IP-сервера}$SUFFIX"
+  [[ -n "$LOCAL_NAME" ]] && URL="http://$LOCAL_NAME$SUFFIX  (или $URL)"
+  # открыть порт в фаерволе, если ufw включён
+  if command -v ufw >/dev/null 2>&1 && sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+    sudo ufw allow "$HTTP_PORT/tcp" >/dev/null && ok "Порт $HTTP_PORT открыт в ufw"
+  fi
 fi
 
 echo

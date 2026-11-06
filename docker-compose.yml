@@ -5,7 +5,7 @@ services:
     container_name: crm
     restart: unless-stopped
     ports:
-      - "${BIND:-127.0.0.1}:3000:3000"   # 127.0.0.1 — за Caddy/nginx; 0.0.0.0 — доступ по IP
+      - "${BIND:-127.0.0.1}:${HTTP_PORT:-3000}:3000"   # 127.0.0.1 — за Caddy/nginx; 0.0.0.0 — доступ из сети
     environment:
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
       - ALLOW_WEB_SETUP=false             # администратор создаётся через install.sh

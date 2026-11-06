@@ -5,14 +5,15 @@
 # Настройки — в /opt/crm/.monitor.env (рядом со скриптом; в git не попадает):
 #   TG_TOKEN=123456:ABC...      # токен бота от @BotFather
 #   TG_CHAT=123456789           # id чата (узнать у @userinfobot или в getUpdates)
-#   CRM_URL=http://127.0.0.1:3000/api/health
+#   CRM_URL=http://127.0.0.1:3000/api/health   # по умолчанию порт берётся из .env
 #   DISK_PATH=/                 # какой раздел проверять
 #   DISK_MIN_FREE_PCT=15        # предупреждать, когда свободно меньше N %
 # Без TG_TOKEN скрипт только пишет в журнал (/tmp/crm-monitor.log).
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 [ -f "$HERE/.monitor.env" ] && . "$HERE/.monitor.env"
-CRM_URL="${CRM_URL:-http://127.0.0.1:3000/api/health}"
+HTTP_PORT=$(grep -s "^HTTP_PORT=" "$HERE/.env" | cut -d= -f2)
+CRM_URL="${CRM_URL:-http://127.0.0.1:${HTTP_PORT:-3000}/api/health}"
 DISK_PATH="${DISK_PATH:-/}"
 DISK_MIN_FREE_PCT="${DISK_MIN_FREE_PCT:-15}"
 STATE="${MONITOR_STATE:-/tmp/crm-monitor.state}"
