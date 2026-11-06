@@ -7,7 +7,9 @@ cd "$(dirname "$0")"
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '\033[32m✓\033[0m %s\n' "$*"; }
 err()  { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; }
-ask()  { local __v; read -r -p "$1" __v; printf '%s' "$__v"; }
+ask()  { local __v; read -r -p "$1" __v; __v="${__v//$'\r'/}"; printf '%s' "$__v"; }
+# «да» по умолчанию: пустой ответ, y, yes, д, да (без регулярок — работают в любой локали)
+yes_default() { case "$1" in ""|y|Y|yes|Yes|YES|д|Д|да|Да|ДА) return 0;; *) return 1;; esac; }
 
 bold "Установка CRM"
 echo
@@ -16,7 +18,7 @@ echo
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
   err "Docker или docker compose не найден."
   ans=$(ask "Установить Docker официальным скриптом get.docker.com? [Y/n] ")
-  if [[ "${ans,,}" =~ ^(|y|yes|д|да)$ ]]; then
+  if yes_default "$ans"; then
     curl -fsSL https://get.docker.com | sudo sh
     sudo usermod -aG docker "$USER" || true
     ok "Docker установлен"
@@ -122,7 +124,7 @@ if [[ -n "$DOMAIN" ]]; then
   bold "4. HTTPS"
   if ! command -v caddy >/dev/null 2>&1; then
     ans=$(ask "Установить Caddy (веб-сервер с автоматическим HTTPS)? [Y/n] ")
-    if [[ "${ans,,}" =~ ^(|y|yes|д|да)$ ]]; then
+    if yes_default "$ans"; then
       sudo apt-get update -qq && sudo apt-get install -y -qq caddy
     fi
   fi
