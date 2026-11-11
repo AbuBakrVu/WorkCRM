@@ -123,16 +123,16 @@ export default function Projects() {
   return (
     <div>
       {/* Заголовок */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[30px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>Проекты</span></span></h1>
-            <span title="Проект — это организация, которую вы обслуживаете. Нажмите на проект, чтобы увидеть его задачи." className="text-ink-2"><Info size={19} /></span>
+            <h1 className="text-[26px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>Проекты</span></span></h1>
+            <span title="Проект — это организация, которую вы обслуживаете. Нажмите на проект, чтобы увидеть его задачи." className="text-ink-3"><Info size={17} /></span>
             <button onClick={() => setOnlyStarred((v) => !v)} title={onlyStarred ? 'Показать все проекты' : 'Только избранные'}>
-              <Star size={19} className={cx('text-ink-2', onlyStarred && 'fill-amber-400 text-amber-400')} />
+              <Star size={17} className={cx('text-ink-3', onlyStarred && 'fill-amber-400 text-amber-400')} />
             </button>
           </div>
-          <p className="text-ink-2 text-[14px] mt-1 reveal-sub">Организации, которые вы обслуживаете, и задачи по каждой из них.</p>
+          <p className="text-ink-3 text-[13.5px] mt-0.5 reveal-sub">Организации, которые вы обслуживаете, и задачи по каждой из них.</p>
         </div>
         <div className="flex items-center gap-2">
           {isManager && <Button icon={Upload} onClick={() => setImporting(true)}>Импорт задач</Button>}
@@ -141,7 +141,7 @@ export default function Projects() {
         </div>
       </div>
 
-      <div className="mt-5">
+      <div className="mt-4">
         <Tabs value={view} onChange={setView} tabs={[
           { value: 'list', label: 'Проекты и задачи', icon: List },
           { value: 'kanban', label: 'Канбан задач', icon: Kanban },
@@ -270,7 +270,7 @@ function ProjectBlock({ p, c, tasks, filter, userMap, open, onToggle, starred, o
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 text-[12px] xl:flex-nowrap xl:shrink-0">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] xl:flex-nowrap xl:shrink-0">
           <Counter label="Открыто" n={c.open} />
           <Counter label="В работе" n={c.in_progress} dot="var(--color-st-progress)" />
           {c.overdue > 0 && <Counter label="Просрочено" n={c.overdue} tone="red" />}
@@ -410,11 +410,15 @@ function TaskMeta({ t }) {
 }
 
 function Counter({ label, n, dot, tone }) {
-  return (
-    <span className={cx('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border whitespace-nowrap',
-      tone === 'red' ? 'border-red-200 bg-red-50 text-red-700' : 'border-line bg-canvas/60 text-ink-2', !n && tone !== 'red' && 'opacity-50')}>
-      {dot && <span className="size-2 rounded-full" style={{ background: dot }} />}
+  if (tone === 'red') return (
+    <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-red-50 text-red-700 font-medium whitespace-nowrap">
       {label} <b className="font-semibold tabular">{n}</b>
+    </span>
+  );
+  return (
+    <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap text-ink-2', !n && 'opacity-45')}>
+      {dot && <span className="size-2 rounded-full" style={{ background: dot }} />}
+      <b className="font-semibold tabular text-ink">{n}</b> {label.toLowerCase()}
     </span>
   );
 }

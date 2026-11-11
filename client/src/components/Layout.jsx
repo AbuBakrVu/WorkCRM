@@ -33,7 +33,8 @@ const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets
 
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();
-  const [pinned, setPinned] = useStored('crm.sidebar.pinned', false);
+  // На широком экране меню по умолчанию раскрыто с подписями; булавка сворачивает его в узкую полосу
+  const [pinned, setPinned] = useStored('crm.sidebar.open', typeof window !== 'undefined' && window.innerWidth >= 1360);
   const [theme, setTheme] = useStored('crm.theme', 'light');
   useEffect(() => {
     const el = document.documentElement;
@@ -85,29 +86,23 @@ export default function Layout() {
         </span>
       </button>
       {!mobile && (
-        <button onClick={() => setPinned((v) => !v)} title={pinned ? 'Открепить меню' : 'Закрепить меню открытым'}
+        <button onClick={() => setPinned((v) => !v)} title={pinned ? 'Свернуть меню' : 'Закрепить меню открытым'}
           className={cx('sb-fade shrink-0 size-8 rounded-lg grid place-items-center', pinned ? 'text-brand bg-brand/10' : 'text-ink-3 hover:text-ink hover:bg-canvas')}>
           {pinned ? <PinOff size={16} /> : <Pin size={16} />}
         </button>
       )}
       </div>
 
-      {/* Поиск */}
-      <div className="sb-search" role="button" tabIndex={0} title="Поиск (Ctrl+K)" onClick={() => setSearchOpen(true)} onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}>
-        <span className="sb-ph sb-fade">Поиск по CRM…</span>
-        <Search size={19} strokeWidth={1.75} />
-      </div>
-
       {/* Разделы */}
       <nav className="sb-nav">
         {items.map((s, k) => (
           <div key={s.section} className="contents">
-            {k > 0 && <div className="sb-hr" />}
+            <div className={cx('sb-sec', k === 0 && 'sb-sec-first')}><span className="sb-fade">{s.section}</span></div>
             {s.items.filter((i) => !i.manager || isManager).map(navItem)}
           </div>
         ))}
         {starredProjects.length > 0 && (<>
-          <div className="sb-hr" />
+          <div className="sb-sec"><span className="sb-fade">Избранное</span></div>
           {starredProjects.slice(0, 6).map((p) => (
             <button key={p.id} onClick={() => nav(`/projects?open=${p.id}`)} className="sb-item" title={p.name}>
               <span className="sb-letter" style={{ background: PROJECT_STATUS[p.status]?.color || 'var(--color-brand)' }}>{p.name.replace(/[^\p{L}\p{N}]/gu, '').slice(0, 1).toUpperCase()}</span>
@@ -137,7 +132,7 @@ export default function Layout() {
           {sidebar(true, true)}
         </div>
       )}
-      <div className={cx('flex-1 min-w-0 flex flex-col transition-[padding] duration-300', pinned ? 'lg:pl-[296px]' : 'lg:pl-[116px]')}>
+      <div className={cx('flex-1 min-w-0 flex flex-col transition-[padding] duration-300', pinned ? 'lg:pl-[272px]' : 'lg:pl-[108px]')}>
         <Topbar crumb={crumb} onMenu={() => setMobileOpen(true)} onSearch={() => setSearchOpen(true)} dash={dash} />
         <main className="flex-1 overflow-y-auto">
           <div key={loc.pathname} className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6 page-enter"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
@@ -157,21 +152,21 @@ function Topbar({ crumb, onMenu, onSearch, dash }) {
   const now = useNow();
   const elapsed = timerSeconds(timer, now);
   return (
-    <header className="h-[60px] shrink-0 flex items-center gap-3 px-4 sm:px-6 border-b border-line bg-panel">
+    <header className="h-14 shrink-0 flex items-center gap-3 px-4 sm:px-6 border-b border-line bg-panel">
       <button onClick={onMenu} className="lg:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-canvas"><Menu size={20} /></button>
-      <div className="text-[13.5px] font-medium text-ink-2 min-w-0 truncate">{crumb}</div>
-      <div className="flex-1 flex justify-center">
-        <button onClick={onSearch} className="hidden md:flex items-center gap-2 w-[300px] h-9 px-3 rounded-xl border border-violet/25 bg-panel text-ink-3 text-[13px] hover:border-violet/50 shadow-[0_0_0_3px_rgba(109,94,246,.05)]">
-          <Search size={15} className="text-violet" />
-          <span className="flex-1 text-left">Поиск по CRM…</span>
-          <span className="flex items-center gap-0.5 text-[11px] text-ink-3"><Command size={11} />K</span>
+      <div className="md:hidden text-[14px] font-semibold text-ink min-w-0 truncate">{crumb}</div>
+      <div className="flex-1 flex">
+        <button onClick={onSearch} className="hidden md:flex items-center gap-2 w-full max-w-[420px] h-9 px-3 rounded-full bg-canvas text-ink-3 text-[13px] border border-transparent hover:border-line-strong transition-colors">
+          <Search size={15} />
+          <span className="flex-1 text-left">Поиск: проекты, задачи, заявки, клиенты…</span>
+          <kbd className="flex items-center gap-0.5 h-5 px-1.5 rounded-md bg-panel border border-line text-[11px] text-ink-3 font-sans"><Command size={10} />K</kbd>
         </button>
       </div>
       <div className="flex items-center gap-2">
         <IconButton icon={Search} title="Поиск" onClick={onSearch} className="md:hidden" />
         <NotificationsButton activity={dash?.activity} />
         {timer ? (
-          <div className={cx('flex items-center gap-1 h-10 pl-1.5 pr-1.5 rounded-full forest-pattern text-white shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)]', timer.paused && 'opacity-90')}
+          <div className={cx('flex items-center gap-1 h-9 pl-1 pr-1 rounded-full forest-pattern text-white shadow-[0_6px_14px_-10px_rgba(14,47,32,.7)]', timer.paused && 'opacity-90')}
             title={timer.task_title || timer.ticket_title || timer.project_name || 'Таймер'}>
             <button onClick={timer.paused ? resumeTimer : pauseTimer} title={timer.paused ? 'Продолжить' : 'Пауза'}
               className="size-7 rounded-full bg-white text-forest flex items-center justify-center hover:scale-105 transition-transform">
@@ -185,7 +180,7 @@ function Topbar({ crumb, onMenu, onSearch, dash }) {
           </div>
         ) : (
           <button onClick={() => setStartOpen(true)}
-            className="flex items-center gap-2 h-10 pl-1.5 pr-4 rounded-full forest-pattern text-white font-semibold text-[13.5px] shadow-[0_10px_22px_-12px_rgba(14,47,32,.9)] hover:brightness-110 transition">
+            className="flex items-center gap-2 h-9 pl-1 pr-4 rounded-full forest-pattern text-white font-semibold text-[13.5px] shadow-[0_6px_14px_-10px_rgba(14,47,32,.7)] hover:brightness-110 transition">
             <span className="size-7 rounded-full bg-white text-forest flex items-center justify-center"><Play size={12} fill="currentColor" /></span>
             <span className="hidden sm:inline">Таймер</span>
           </button>

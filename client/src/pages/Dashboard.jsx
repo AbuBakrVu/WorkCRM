@@ -44,12 +44,12 @@ export default function Dashboard() {
         <Stat featured to="/projects" label="Открытые задачи" value={t.open || 0}
           sub={`${t.in_progress || 0} в работе · ${t.unassigned || 0} без исполнителя`} />
         <Stat to="/projects" label="Просрочено" value={t.overdue || 0} tone={t.overdue ? 'red' : undefined}
-          sub={<span className={t.due_soon ? 'text-amber-600' : ''}>{t.due_soon || 0} со сроком в ближайшие 3 дня</span>} />
-        <Stat to="/tickets" label="Открытые заявки" value={d.tickets.open || 0} tone={d.tickets.overdue ? 'red' : undefined}
-          sub={d.tickets.overdue ? `${d.tickets.overdue} просрочено по SLA` : 'просроченных нет'} />
+          sub={<span className={t.due_soon ? 'text-amber-700' : ''}>{t.due_soon || 0} со сроком в ближайшие 3 дня</span>} />
+        <Stat to="/tickets" label="Открытые заявки" value={d.tickets.open || 0}
+          sub={d.tickets.overdue ? <span className="text-red-600 font-medium">{d.tickets.overdue} просрочено по SLA</span> : 'просроченных нет'} />
         {isManager && inv ? (
-          <Stat to="/finance/invoices" label="Ждём оплату" value={fmtMoneyShort(inv.unpaid_sum)} tone={inv.overdue ? 'red' : undefined}
-            sub={inv.overdue ? `${inv.overdue} просрочено на ${fmtMoneyShort(inv.overdue_sum)}` : `${inv.unpaid} счетов, просроченных нет`} />
+          <Stat to="/finance/invoices" label="Ждём оплату" value={fmtMoneyShort(inv.unpaid_sum)}
+            sub={inv.overdue ? <span className="text-red-600 font-medium">{inv.overdue} просрочено на {fmtMoneyShort(inv.overdue_sum)}</span> : `${inv.unpaid} счетов, просроченных нет`} />
         ) : (
           <Stat to="/projects?view=time" label="Мои часы за неделю" value={fmtHours(myWeek)} sub="по учёту времени" />
         )}

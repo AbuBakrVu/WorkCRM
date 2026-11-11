@@ -8,7 +8,7 @@ import { MessageText, useMentions } from '../components/Mentions';
 import { api } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
 import { fmtDateTime, fmtHM, parseDate, timeAgo } from '../lib/format';
-import { Button, Tabs, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, userOptions, nameOptions, SearchList } from '../components/ui';
+import { Button, Segmented, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, userOptions, nameOptions, SearchList } from '../components/ui';
 
 const OPEN = ['new', 'in_progress', 'waiting'];
 
@@ -70,18 +70,13 @@ export default function Tickets() {
       <PageHeader title="Заявки" subtitle="Обращения пользователей: неисправности, доступы, оборудование. Срок реакции считается по приоритету."
         actions={<Button variant="primary" icon={Plus} onClick={() => setFormOpen(true)}>Новая заявка</Button>} />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <Tabs value={scope} onChange={setScope} tabs={[
-            { value: 'open', label: 'Открытые', count: counts.open },
-            { value: 'overdue', label: 'Просроченные', count: counts.overdue },
-            { value: 'done', label: 'Решённые', count: counts.done },
-            { value: 'all', label: 'Все', count: all.length },
-          ]} />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 mt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented value={scope} onChange={setScope} items={[
+          { value: 'open', label: 'Открытые', count: counts.open },
+          { value: 'overdue', label: 'Просроченные', count: counts.overdue, tone: 'red' },
+          { value: 'done', label: 'Решённые', count: counts.done },
+          { value: 'all', label: 'Все', count: all.length },
+        ]} />
         <div className="flex items-center gap-1.5 h-9 px-3 rounded-full border border-line bg-panel">
           <Search size={15} className="text-ink-3" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Номер, тема, место, заявитель" className="outline-none text-[13px] w-56 bg-transparent" />
@@ -118,7 +113,7 @@ export default function Tickets() {
           <Card className="overflow-x-auto">
             <table className="w-full">
               <thead><tr className="border-b border-line bg-canvas/60">
-                <th className="th w-16">№</th><th className="th min-w-[240px]">Тема</th><th className="th">Приоритет</th><th className="th">Статус</th>
+                <th className="th w-14">№</th><th className="th min-w-[220px]">Тема</th><th className="th">Приоритет</th><th className="th">Статус</th>
                 <th className="th">Место</th><th className="th">Исполнитель</th><th className="th">Срок реакции</th>
               </tr></thead>
               <tbody>
@@ -140,7 +135,7 @@ export default function Tickets() {
                           {({ close }) => Object.entries(TICKET_STATUS).map(([k, s]) => <MenuItem key={k} checked={k === t.status} onClick={() => { patch(t.id, { status: k }); close(); }}><StatusDot color={s.color} label={s.label} /></MenuItem>)}
                         </Popover>
                       </td>
-                      <td className="td max-w-[200px] truncate">{t.location || '—'}</td>
+                      <td className="td max-w-[150px] xl:max-w-[170px] 2xl:max-w-[240px] truncate" title={t.location || undefined}>{t.location || '—'}</td>
                       <td className="td">
                         <Popover width={220} trigger={({ toggle }) => (
                           <button onClick={toggle} className="flex items-center gap-2">

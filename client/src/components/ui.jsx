@@ -334,8 +334,8 @@ export function Tabs({ tabs, value, onChange }) {
     <div ref={wrap} className="relative flex items-center gap-1 border-b border-line overflow-x-auto">
       {tabs.map((t) => (
         <button key={t.value} data-active={value === t.value} onClick={() => onChange(t.value)}
-          className={cx('relative flex items-center gap-1.5 px-2.5 h-10 text-[13px] font-medium whitespace-nowrap transition-colors',
-            value === t.value ? 'text-ink' : 'text-ink-3 hover:text-ink-2')}>
+          className={cx('relative flex items-center gap-1.5 px-2.5 h-10 text-[13.5px] whitespace-nowrap transition-colors',
+            value === t.value ? 'text-ink font-semibold' : 'text-ink-2 font-medium hover:text-ink')}>
           {t.icon && <t.icon size={15} />}
           {t.label}
           {t.count != null && <span className="text-[11px] text-ink-3 bg-canvas rounded-full px-1.5">{t.count}</span>}
@@ -413,18 +413,18 @@ export const HubContext = createContext(null);
 export function PageHeader({ title, subtitle, actions, icons }) {
   const hub = useContext(HubContext);
   return (
-    <div className="mb-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[30px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>{hub?.title || title}</span></span></h1>
+            <h1 className="text-[26px] leading-tight font-bold tracking-[-0.02em]"><span className="reveal"><span>{hub?.title || title}</span></span></h1>
             {icons}
           </div>
-          {subtitle && <p className="text-ink-2 text-[14px] mt-1 reveal-sub">{subtitle}</p>}
+          {subtitle && <p className="text-ink-3 text-[13.5px] mt-0.5 reveal-sub">{subtitle}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 reveal-sub">{actions}</div>}
       </div>
-      {hub && hub.tabs.length > 1 && <Segmented className="mt-4 w-fit" items={hub.tabs} value={hub.value} onChange={hub.onChange} />}
+      {hub && hub.tabs.length > 1 && <div className="mt-4"><Tabs tabs={hub.tabs} value={hub.value} onChange={hub.onChange} /></div>}
     </div>
   );
 }
@@ -432,17 +432,17 @@ export function PageHeader({ title, subtitle, actions, icons }) {
 // Карточка-показатель. featured — тёмно-зелёная (главная), to — ссылка (стрелка в круге)
 export function Stat({ label, value, sub, icon: Icon, featured, to, tone }) {
   const body = (
-    <div className={cx('group relative h-full rounded-[22px] p-5 overflow-hidden lift',
-      featured ? 'forest-solid text-white shadow-[0_18px_36px_-20px_rgba(14,47,32,.8)]' : 'bg-panel border border-line')}>
-      <div className="flex items-start justify-between gap-3">
-        <span className={cx('text-[14px] font-semibold', featured ? 'text-white' : 'text-ink')}>{label}</span>
-        <span className={cx('arrow-btn size-9 shrink-0 rounded-full flex items-center justify-center',
-          featured ? 'bg-white text-forest' : 'border border-ink/70 text-ink')}>
-          {to ? <ArrowUpRight size={17} /> : Icon ? <Icon size={16} /> : <ArrowUpRight size={17} />}
+    <div className={cx('group relative h-full rounded-[20px] px-5 py-4 overflow-hidden lift',
+      featured ? 'forest-solid text-white shadow-[0_12px_24px_-18px_rgba(14,47,32,.7)]' : 'bg-panel border border-line')}>
+      <div className="flex items-center justify-between gap-3">
+        <span className={cx('text-[13px] font-medium', featured ? 'text-white/85' : 'text-ink-2')}>{label}</span>
+        <span className={cx('arrow-btn size-7 shrink-0 rounded-full flex items-center justify-center',
+          featured ? 'bg-white/15 text-white' : 'bg-canvas text-ink-2')}>
+          {to ? <ArrowUpRight size={15} /> : Icon ? <Icon size={14} /> : <ArrowUpRight size={15} />}
         </span>
       </div>
-      <div className={cx('text-[40px] leading-none font-bold tracking-[-0.03em] mt-5 tabular', tone === 'red' && !featured && 'text-red-600')}><CountUp value={value} /></div>
-      {sub && <div className={cx('text-[12px] mt-3', featured ? 'text-white/75' : 'text-ink-3')}>{sub}</div>}
+      <div className={cx('text-[32px] leading-none font-bold tracking-[-0.03em] mt-3 tabular', tone === 'red' && !featured && 'text-red-600')}><CountUp value={value} /></div>
+      {sub && <div className={cx('text-[12.5px] mt-2', featured ? 'text-white/80' : 'text-ink-3')}>{sub}</div>}
     </div>
   );
   return to ? <Link to={to} className="block h-full">{body}</Link> : body;

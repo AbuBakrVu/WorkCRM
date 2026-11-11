@@ -5,7 +5,7 @@ import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
 import { INVOICE_STATUS, VAT_MODE, VAT_RATES } from '../lib/constants';
 import { fmtRub, fmtMoneyShort, fmtDate, todayStr, toDateStr, plural } from '../lib/format';
-import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, Stat, Tabs, StatusDot, cx, nameOptions } from '../components/ui';
+import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, Stat, Segmented, StatusDot, cx, nameOptions } from '../components/ui';
 import { ItemsEditor, badItem, itemsBody, itemsFromServer } from '../components/ItemsEditor';
 import { HistoryPanel } from '../components/History';
 import { DocumentsPanel } from '../components/Documents';
@@ -51,7 +51,7 @@ export default function Invoices() {
         <Stat label="Оплачено в этом месяце" value={fmtMoneyShort(paidMonth)} icon={CheckCircle2} />
         <Stat label="Выставлено в этом месяце" value={fmtMoneyShort(issuedMonth.reduce((a, i) => a + i.total, 0))} sub={`${issuedMonth.length} ${plural(issuedMonth.length, 'счёт', 'счёта', 'счетов')}`} icon={Receipt} />
       </div>
-      <Tabs value={tab} onChange={setTab} tabs={[...Object.entries(TABS).map(([value, label]) => ({ value, label, count: counts[value] })),
+      <Segmented className="w-fit" value={tab} onChange={setTab} items={[...Object.entries(TABS).map(([value, label]) => ({ value, label, count: counts[value], tone: value === 'overdue' ? 'red' : undefined })),
         { value: 'debtors', label: 'Должники', icon: Users }]} />
       <div className="mt-4">
         {tab === 'debtors' ? <Debtors /> : (<>
