@@ -3,7 +3,8 @@ import { Repeat, Pause, Play, Pencil, Trash2, CalendarClock } from 'lucide-react
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { fmtDate, todayStr, plural } from '../lib/format';
-import { Button, Card, Empty, Spinner, Field, Select, Modal, UserPicker, Avatar, ConfirmButton, cx, userOptions, nameOptions } from './ui';
+import { Button, Card, Empty, Spinner, Field, Select, Modal, UserPicker, Avatar, ConfirmButton, cx, userOptions } from './ui';
+import { ProjectSelect } from './ProjectForm';
 
 export const FREQ = { daily: 'Каждый день', weekly: 'Каждую неделю', monthly: 'Каждый месяц', yearly: 'Каждый год' };
 const UNIT = { daily: ['день', 'дня', 'дней'], weekly: ['неделю', 'недели', 'недель'], monthly: ['месяц', 'месяца', 'месяцев'], yearly: ['год', 'года', 'лет'] };
@@ -94,7 +95,7 @@ export function RecurrenceList({ projectFilter }) {
 }
 
 function RecurrenceModal({ rec, onClose, onSaved }) {
-  const { users, projects, toast } = useApp();
+  const { users, toast } = useApp();
   const [f, setF] = useState(null);
   useEffect(() => { setF(rec ? { ...rec } : null); }, [rec]);
   if (!f) return null;
@@ -111,7 +112,7 @@ function RecurrenceModal({ rec, onClose, onSaved }) {
     <Modal open onClose={onClose} title="Повторяющаяся задача" width={620}
       footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={save}>Сохранить</Button></>}>
       <div className="space-y-3.5">
-        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} search options={nameOptions(projects)} /></Field>
+        <Field label="Проект"><ProjectSelect value={f.project_id} onChange={set('project_id')} /></Field>
         <Field label="Название"><input className="input" value={f.title || ''} onChange={set('title')} /></Field>
         <Field label="Описание"><textarea className="input" rows={3} value={f.description || ''} onChange={set('description')} /></Field>
         <div className="grid grid-cols-2 gap-3.5">

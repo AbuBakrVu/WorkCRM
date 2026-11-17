@@ -11,8 +11,9 @@ import { TASK_STATUS } from '../lib/constants';
 import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
 import { ChecklistBlock, SubtasksBlock, DepsBlock } from './TaskExtras';
 import { RecurrenceFields, recurrenceBody, ruleText } from './Recurrence';
-import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, HoursDeleteDialog, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, nameOptions, SearchList } from './ui';
+import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, HoursDeleteDialog, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, SearchList } from './ui';
 import { HistoryPanel } from './History';
+import { ProjectSelect } from './ProjectForm';
 
 const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
 
@@ -71,7 +72,7 @@ export function TaskWorkActions({ task: t, onStarted }) {
 
 /* ---------- Создание / редактирование задачи ---------- */
 export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
-  const { users, projects, toast, bump } = useApp();
+  const { users, toast, bump } = useApp();
   const [f, setF] = useState({});
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
@@ -137,7 +138,7 @@ export function TaskFormModal({ open, onClose, task, projectId, onSaved }) {
           </Field>
         )}
         <Field label="Проект (организация)">
-          <Select value={f.project_id} onChange={set('project_id')} placeholder="Выберите проект" search options={nameOptions(projects)} />
+          <ProjectSelect value={f.project_id} onChange={set('project_id')} placeholder="Выберите проект" />
           {err('project_id')}
         </Field>
         <Field label="Название задачи">

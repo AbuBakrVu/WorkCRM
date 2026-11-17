@@ -7,6 +7,8 @@ import { TICKET_STATUS } from '../lib/constants';
 import { fmtDate, todayStr } from '../lib/format';
 import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, StatusDot, cx, nameOptions } from '../components/ui';
 import { HistoryPanel } from '../components/History';
+import { ClientSelect } from '../components/ClientForm';
+import { ProjectSelect } from '../components/ProjectForm';
 
 export const ASSET_TYPES = {
   pc: ['Компьютер', Monitor], laptop: ['Ноутбук', Laptop], printer: ['Принтер / МФУ', Printer], switch: ['Коммутатор', Network], router: ['Роутер / точка доступа', Router],
@@ -126,7 +128,7 @@ function AssetDrawer({ id, onClose, onEdit }) {
 }
 
 function AssetModal({ asset, onClose, onSaved }) {
-  const { clients, projects, toast, bump } = useApp();
+  const { toast, bump } = useApp();
   const [f, setF] = useState({ type: 'pc', status: 'active', ...asset });
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
   const save = async () => {
@@ -143,8 +145,8 @@ function AssetModal({ asset, onClose, onSaved }) {
         <Field label="Тип"><Select value={f.type} onChange={set('type')} options={Object.entries(ASSET_TYPES).map(([value, [label]]) => ({ value, label }))} /></Field>
         <Field label="Статус"><Select value={f.status} onChange={set('status')} options={Object.entries(ASSET_STATUS).map(([value, s]) => ({ value, label: s.label, color: s.color }))} /></Field>
         <Field label="Название" className="col-span-2" hint="Как его называют у клиента: «ПК бухгалтера», «Коммутатор 2 этаж»">{inp('name', { autoFocus: true })}</Field>
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
-        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" search options={nameOptions(projects)} /></Field>
+        <Field label="Клиент"><ClientSelect value={f.client_id} onChange={set('client_id')} placeholder="—" /></Field>
+        <Field label="Проект"><ProjectSelect value={f.project_id} onChange={set('project_id')} placeholder="—" /></Field>
         <Field label="Модель">{inp('model')}</Field>
         <Field label="Серийный номер">{inp('serial')}</Field>
         <Field label="IP-адрес">{inp('ip', { placeholder: '192.168.1.10' })}</Field>

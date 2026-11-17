@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { X, ChevronDown, Check, ArrowUpRight, Search, Clock } from 'lucide-react';
+import { X, ChevronDown, Check, ArrowUpRight, Search, Clock, Plus } from 'lucide-react';
 import { initials, fmtHours } from '../lib/format';
 
 export const cx = (...a) => a.filter(Boolean).join(' ');
@@ -75,13 +75,23 @@ export function Card({ className, children, ...p }) {
   return <div {...p} className={cx('bg-panel rounded-[20px] border border-line', className)}>{children}</div>;
 }
 
-export function Modal({ open, onClose, title, children, footer, width = 520 }) {
+// Стек открытых окон: Escape закрывает только верхнее (модалка поверх модалки)
+const escStack = [];
+function useEscape(open, onClose) {
+  const ref = useRef(onClose);
+  ref.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const h = (e) => e.key === 'Escape' && onClose?.();
+    const token = {};
+    escStack.push(token);
+    const h = (e) => { if (e.key === 'Escape' && escStack[escStack.length - 1] === token) ref.current?.(); };
     window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
+    return () => { window.removeEventListener('keydown', h); escStack.splice(escStack.indexOf(token), 1); };
+  }, [open]);
+}
+
+export function Modal({ open, onClose, title, children, footer, width = 520 }) {
+  useEscape(open, onClose);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[8vh] bg-ink/25 anim-fade overflow-y-auto" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
@@ -97,12 +107,7 @@ export function Modal({ open, onClose, title, children, footer, width = 520 }) {
 }
 
 export function Drawer({ open, onClose, title, children, width = 640, actions }) {
-  useEffect(() => {
-    if (!open) return;
-    const h = (e) => e.key === 'Escape' && onClose?.();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
+  useEscape(open, onClose);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-40 flex justify-end bg-ink/20 anim-fade" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
@@ -129,7 +134,7 @@ export function Field({ label, children, className, hint }) {
 
 // Поиск по списку + выбор (клавиатура: ↑ ↓ Enter, Esc — закрыть)
 // items: [{ value, label, user?, color?, hint? }]; value — одно значение или массив (multi)
-export function SearchList({ items, value, onPick, multi, search = true, placeholder = 'Поиск…', empty = 'Ничего не найдено', onEscape, maxHeight = 280 }) {
+export function SearchList({ items, value, onPick, multi, search = true, placeholder = 'Поиск…', empty = 'Ничего не найдено', onEscape, maxHeight = 280, onCreate, createLabel = 'Создать' }) {
   const [q, setQ] = useState('');
   const [hi, setHi] = useState(0);
   const listRef = useRef(null);
@@ -166,6 +171,12 @@ export function SearchList({ items, value, onPick, multi, search = true, placeho
         ))}
         {!shown.length && <div className="px-2.5 py-3 text-[12.5px] text-ink-3 text-center">{empty}</div>}
       </div>
+      {onCreate && (
+        <button type="button" onClick={() => onCreate(q.trim())}
+          className="w-full flex items-center gap-2 px-2.5 min-h-8 py-1 mt-1 rounded-lg text-[13px] text-left font-medium text-brand hover:bg-brand/10 border-t border-line">
+          <Plus size={15} className="shrink-0" /><span className="truncate">{q.trim() ? `${createLabel}: «${q.trim()}»` : createLabel}</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -213,7 +224,7 @@ export function FloatingPanel({ open, anchorRef, onClose, minWidth, children }) 
 
 // Выпадающий список. Для длинных списков (или search) — с поиском.
 // Возвращает значение строкой, как обычный <select>; пустое — null.
-export function Select({ value, onChange, options, placeholder, className, disabled, search, renderValue }) {
+export function Select({ value, onChange, options, placeholder, className, disabled, search, renderValue, onCreate, createLabel }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const close = useCallback(() => setOpen(false), []);
@@ -230,7 +241,8 @@ export function Select({ value, onChange, options, placeholder, className, disab
         <ChevronDown size={15} className={cx('text-ink-3 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
       <FloatingPanel open={open} anchorRef={ref} onClose={close}>
-        <SearchList items={items} value={value} search={withSearch} onEscape={close}
+        <SearchList items={items} value={value} search={withSearch || !!onCreate} onEscape={close}
+          onCreate={onCreate && ((q) => { close(); onCreate(q); })} createLabel={createLabel}
           onPick={(v) => { onChange(v === null || v === undefined || v === '' ? null : String(v)); close(); }} />
       </FloatingPanel>
     </>

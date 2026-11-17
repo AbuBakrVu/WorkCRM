@@ -4,9 +4,10 @@ import { ChevronLeft, ChevronRight, Plus, Trash2, Download, Timer } from 'lucide
 import { useApp, useLoad, useNow } from '../lib/store';
 import { api } from '../lib/api';
 import { fmtHM, fmtTime, fmtDate, toDateStr, parseDate, fmtHours } from '../lib/format';
-import { Button, Card, Modal, Field, Select, Avatar, Popover, Empty, PageHeader, Stat, cx, userOptions, nameOptions, SearchList } from '../components/ui';
+import { Button, Card, Modal, Field, Select, Avatar, Popover, Empty, PageHeader, Stat, cx, userOptions, SearchList } from '../components/ui';
 import { TimerStartModal } from '../components/TimerStart';
 import { TimerCard } from '../components/TimerCard';
+import { ProjectSelect } from '../components/ProjectForm';
 
 const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const monday = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
@@ -179,7 +180,7 @@ export default function TimeTracker({ embedded = false, openAdd = false, onAddOp
 }
 
 function ManualTimeModal({ open, onClose }) {
-  const { user, users, projects, isManager, toast, bump } = useApp();
+  const { user, users, isManager, toast, bump } = useApp();
   const [f, setF] = useState({});
   const [tasks, setTasks] = useState([]);
   useEffect(() => { if (open) setF({ date: toDateStr(new Date()), start: '09:00', hours: '1', minutes: '0', user_id: user.id }); }, [open, user.id]);
@@ -200,7 +201,7 @@ function ManualTimeModal({ open, onClose }) {
       footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit}>Добавить</Button></>}>
       <form onSubmit={submit} className="grid grid-cols-2 gap-3.5">
         {isManager && <Field label="Сотрудник" className="col-span-2"><Select value={f.user_id} onChange={set('user_id')} search options={userOptions(users)} /></Field>}
-        <Field label="Проект"><Select value={f.project_id} onChange={(v) => setF((x) => ({ ...x, project_id: v, task_id: null }))} placeholder="Без проекта" search options={nameOptions(projects)} /></Field>
+        <Field label="Проект"><ProjectSelect value={f.project_id} onChange={(v) => setF((x) => ({ ...x, project_id: v, task_id: null }))} placeholder="Без проекта" /></Field>
         <Field label="Задача"><Select value={f.task_id} onChange={set('task_id')} placeholder="—" disabled={!f.project_id} search options={tasks.map((t) => ({ value: t.id, label: t.title }))} /></Field>
         <Field label="Дата"><input type="date" className="input" value={f.date || ''} onChange={(e) => set('date')(e.target.value)} /></Field>
         <Field label="Начало"><input type="time" className="input" value={f.start || ''} onChange={(e) => set('start')(e.target.value)} /></Field>

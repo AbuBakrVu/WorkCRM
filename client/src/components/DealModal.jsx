@@ -7,12 +7,13 @@ import { DEAL_STAGE, INVOICE_STATUS, LOST_REASONS } from '../lib/constants';
 import { fmtRub, fmtDate } from '../lib/format';
 import { ItemsEditor, badItem, itemsBody } from './ItemsEditor';
 export { calcItems } from './ItemsEditor';
-import { Button, Modal, Field, Select, ConfirmButton, Spinner, StatusDot, userOptions, nameOptions } from './ui';
+import { Button, Modal, Field, Select, ConfirmButton, Spinner, StatusDot, userOptions } from './ui';
 import { HistoryPanel } from './History';
 import { DocumentsPanel } from './Documents';
+import { ClientSelect } from './ClientForm';
 
 export function DealModal({ deal, onClose }) {
-  const { users, clients, toast, bump, isManager } = useApp();
+  const { users, toast, bump, isManager } = useApp();
   const [companies, setCompanies] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [f, setF] = useState(null);
@@ -75,7 +76,7 @@ export function DealModal({ deal, onClose }) {
         <div className="space-y-5" onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <Field label="Название" className="col-span-2 md:col-span-4"><input className="input" value={f.title || ''} onChange={set('title')} autoFocus placeholder="Например: Поставка коммутаторов для ЧГУ" /></Field>
-            <Field label="Клиент" className="col-span-2"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
+            <Field label="Клиент" className="col-span-2"><ClientSelect value={f.client_id} onChange={set('client_id')} placeholder="—" /></Field>
             <Field label="Наша компания" className="col-span-2" hint={!companies.length ? 'Добавьте в Настройки → Мои компании' : undefined}>
               <Select value={f.company_id} onChange={set('company_id')} placeholder="—" search options={companies.map((c) => ({ value: c.id, label: c.name, hint: c.inn ? `ИНН ${c.inn}` : undefined }))} />
             </Field>

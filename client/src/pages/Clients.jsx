@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Plus, Search, X, Building2, Phone, Mail, Pencil, FileClock, Upload } from 'lucide-react';
 import { ImportModal } from '../components/Import';
+import { ClientFormModal } from '../components/ClientForm';
 import { useApp, useLoad, useStored } from '../lib/store';
 import { ContractsView } from '../components/Contracts';
 import { api } from '../lib/api';
 import { CLIENT_TYPE, PROJECT_STATUS, DEAL_STAGE, TICKET_STATUS, INVOICE_STATUS } from '../lib/constants';
 import { fmtMoney, fmtMoneyShort, fmtDate } from '../lib/format';
-import { RequisitesFields, InnButton } from '../components/Requisites';
-import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, StatusDot, ConfirmButton, PageHeader, Tabs, cx } from '../components/ui';
+import { Button, Card, Empty, Spinner, Drawer, StatusDot, ConfirmButton, PageHeader, Tabs, cx } from '../components/ui';
 import { HistoryPanel } from '../components/History';
 import { PortalAccess } from '../components/PortalAccess';
 import { ClientReportButton } from './Reports';
@@ -83,40 +83,6 @@ export default function Clients() {
       <ClientDrawer id={openId} onClose={() => setOpenId(null)} onEdit={(c) => setForm(c)} />
       <ClientFormModal client={form} onClose={() => setForm(null)} onSaved={(c) => setOpenId(c.id)} />
     </div>
-  );
-}
-
-function ClientFormModal({ client, onClose, onSaved }) {
-  const { toast, bump } = useApp();
-  const [f, setF] = useState({});
-  useEffect(() => { if (client) setF({ type: 'company', ...client }); }, [client]);
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
-  const submit = async (e) => {
-    e?.preventDefault();
-    if (!f.name?.trim()) return toast('Укажите название', 'error');
-    const body = Object.fromEntries(['name', 'type', 'contact_name', 'phone', 'email', 'inn', 'address', 'notes', 'full_name', 'kpp', 'ogrn',
-      'bank_name', 'bik', 'account', 'corr_account', 'director_name', 'director_title', 'edo_id'].map((k) => [k, f[k] ?? null]));
-    try {
-      const c = f.id ? await api.put(`/clients/${f.id}`, body) : await api.post('/clients', body);
-      toast('Сохранено'); bump(); onSaved?.(c); onClose();
-    } catch (err) { toast(err.message, 'error'); }
-  };
-  return (
-    <Modal open={!!client} onClose={onClose} title={f.id ? 'Редактировать клиента' : 'Новый клиент'} width={560}
-      footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit}>Сохранить</Button></>}>
-      <form onSubmit={submit} className="grid grid-cols-2 gap-3.5">
-        <Field label="Название" className="col-span-2"><input className="input" value={f.name || ''} onChange={set('name')} autoFocus /></Field>
-        <Field label="Тип"><Select value={f.type} onChange={set('type')} options={Object.entries(CLIENT_TYPE).map(([value, label]) => ({ value, label }))} /></Field>
-        <Field label="ИНН"><div className="flex gap-2"><input className="input" value={f.inn || ''} onChange={set('inn')} inputMode="numeric" maxLength={12} />
-          {f.type !== 'person' && <InnButton inn={f.inn} fill={(d) => setF((x) => ({ ...x, ...Object.fromEntries(Object.entries(d).filter(([k, v]) => v != null && k !== 'status' && !(k === 'name' && x.name))) }))} />}</div></Field>
-        <Field label="Контактное лицо"><input className="input" value={f.contact_name || ''} onChange={set('contact_name')} /></Field>
-        <Field label="Телефон"><input className="input" value={f.phone || ''} onChange={set('phone')} /></Field>
-        <Field label="Email"><input className="input" type="email" value={f.email || ''} onChange={set('email')} /></Field>
-        <Field label="Адрес"><input className="input" value={f.address || ''} onChange={set('address')} /></Field>
-        {f.type !== 'person' && <RequisitesFields f={f} set={set} withInn={false} open={!!(f.kpp || f.account || f.full_name)} title="Реквизиты для документов" />}
-        <Field label="Заметки" className="col-span-2"><textarea className="input" rows={3} value={f.notes || ''} onChange={set('notes')} /></Field>
-      </form>
-    </Modal>
   );
 }
 

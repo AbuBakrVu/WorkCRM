@@ -8,7 +8,9 @@ import { MessageText, useMentions } from '../components/Mentions';
 import { api } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
 import { fmtDateTime, fmtHM, parseDate, timeAgo } from '../lib/format';
-import { Button, Segmented, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, userOptions, nameOptions, SearchList } from '../components/ui';
+import { Button, Segmented, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, userOptions, SearchList } from '../components/ui';
+import { ClientSelect } from '../components/ClientForm';
+import { ProjectSelect } from '../components/ProjectForm';
 
 const OPEN = ['new', 'in_progress', 'waiting'];
 
@@ -205,7 +207,7 @@ function TicketKanban({ tickets, now, onOpen, onPatch, scope }) {
 }
 
 export function TicketFormModal({ open, onClose, onSaved }) {
-  const { users, clients, projects, toast } = useApp();
+  const { users, toast } = useApp();
   const [f, setF] = useState({});
   const [assets, setAssets] = useState([]);
   useEffect(() => {
@@ -246,8 +248,8 @@ export function TicketFormModal({ open, onClose, onSaved }) {
         <Field label="Заявитель"><input className="input" value={f.requester || ''} onChange={(e) => set('requester')(e.target.value)} /></Field>
         <Field label="Контакт заявителя"><input className="input" value={f.requester_contact || ''} onChange={(e) => set('requester_contact')(e.target.value)} placeholder="Телефон или email" /></Field>
         <Field label="Исполнитель"><Select value={f.assignee_id} onChange={set('assignee_id')} placeholder="Не назначен" search options={userOptions(users)} /></Field>
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
-        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" search options={nameOptions(projects)} /></Field>
+        <Field label="Клиент"><ClientSelect value={f.client_id} onChange={set('client_id')} placeholder="—" /></Field>
+        <Field label="Проект"><ProjectSelect value={f.project_id} onChange={set('project_id')} placeholder="—" /></Field>
         <Field label="Устройство"><Select value={f.asset_id} onChange={pickAsset} placeholder="—" search
           options={assets.filter((a) => !f.client_id || a.client_id === +f.client_id).map((a) => ({ value: a.id, label: a.name, hint: [a.location, a.ip].filter(Boolean).join(' · ') || a.client_name }))} /></Field>
         <Field label="Описание" className="col-span-2"><textarea className="input" rows={3} value={f.description || ''} onChange={(e) => set('description')(e.target.value)} /></Field>
@@ -257,7 +259,7 @@ export function TicketFormModal({ open, onClose, onSaved }) {
 }
 
 function TicketDrawer({ id, onClose }) {
-  const { users, clients, projects, toast, bump, startTimer, isManager, version } = useApp();
+  const { users, toast, bump, startTimer, isManager, version } = useApp();
   const [t, setT] = useState(null);
   const [comment, setComment] = useState('');
   const cRef = useRef(null);
@@ -296,8 +298,8 @@ function TicketDrawer({ id, onClose }) {
             <Field label="Категория"><Select value={t.category} onChange={(v) => patch({ category: v })} options={Object.entries(TICKET_CATEGORY).map(([value, label]) => ({ value, label }))} /></Field>
             <Field label="Место"><input className="input" defaultValue={t.location || ''} onBlur={(e) => e.target.value !== (t.location || '') && patch({ location: e.target.value })} /></Field>
             <Field label="Заявитель"><input className="input" defaultValue={t.requester || ''} onBlur={(e) => e.target.value !== (t.requester || '') && patch({ requester: e.target.value })} /></Field>
-            <Field label="Клиент"><Select value={t.client_id} onChange={(v) => patch({ client_id: v ? +v : null })} placeholder="—" search options={nameOptions(clients)} /></Field>
-            <Field label="Проект"><Select value={t.project_id} onChange={(v) => patch({ project_id: v ? +v : null })} placeholder="—" search options={nameOptions(projects)} /></Field>
+            <Field label="Клиент"><ClientSelect value={t.client_id} onChange={(v) => patch({ client_id: v ? +v : null })} placeholder="—" /></Field>
+            <Field label="Проект"><ProjectSelect value={t.project_id} onChange={(v) => patch({ project_id: v ? +v : null })} placeholder="—" /></Field>
             {t.asset_id && <div className="col-span-2 text-[13px]"><span className="text-ink-3">Устройство: </span><Link to={`/infra/assets?open=${t.asset_id}`} className="text-violet hover:underline">{t.asset_name}</Link></div>}
           </div>
           {t.requester_contact && <div className="text-[13px] text-ink-2">Контакт: {t.requester_contact}</div>}

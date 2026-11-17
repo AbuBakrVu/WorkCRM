@@ -4,8 +4,10 @@ import { Plus, Search, X, BookOpen, Pin, KeyRound, Eye, EyeOff, Copy, Pencil, Bu
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
-import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, nameOptions } from '../components/ui';
+import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx } from '../components/ui';
 import { HistoryPanel } from '../components/History';
+import { ClientSelect } from '../components/ClientForm';
+import { ProjectSelect } from '../components/ProjectForm';
 
 // Простое оформление текста: **жирный**, `код`, ссылки, списки «- », заголовки «# »
 function Rich({ text }) {
@@ -124,7 +126,7 @@ function KbDrawer({ id, onClose, onEdit }) {
 }
 
 function KbModal({ article, cats, onClose, onSaved }) {
-  const { clients, projects, toast, bump } = useApp();
+  const { toast, bump } = useApp();
   const [assets, setAssets] = useState([]);
   const [f, setF] = useState({ ...article });
   const [secret, setSecret] = useState(null); // null — не меняем
@@ -143,8 +145,8 @@ function KbModal({ article, cats, onClose, onSaved }) {
       <div className="grid grid-cols-2 gap-3.5">
         <Field label="Заголовок" className="col-span-2"><input className="input" value={f.title || ''} onChange={set('title')} autoFocus placeholder="Например: Доступы к роутеру в ТЦ «Гранд Парк»" /></Field>
         <Field label="Раздел"><input className="input" list="kb-cats" value={f.category || ''} onChange={set('category')} placeholder="Инструкции, Доступы, Схемы сети…" /><datalist id="kb-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist></Field>
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
-        <Field label="Проект"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" search options={nameOptions(projects)} /></Field>
+        <Field label="Клиент"><ClientSelect value={f.client_id} onChange={set('client_id')} placeholder="—" /></Field>
+        <Field label="Проект"><ProjectSelect value={f.project_id} onChange={set('project_id')} placeholder="—" /></Field>
         <Field label="Устройство"><Select value={f.asset_id} onChange={set('asset_id')} placeholder="—" search options={assets.filter((a) => !f.client_id || a.client_id === +f.client_id).map((a) => ({ value: a.id, label: a.name, hint: a.client_name }))} /></Field>
         <Field label="Текст" className="col-span-2" hint="Оформление: **жирный**, `команда`, строки с «- » — список, с «# » — заголовок. Ссылки становятся кликабельными.">
           <textarea className="input font-[450]" rows={10} value={f.body || ''} onChange={set('body')} />

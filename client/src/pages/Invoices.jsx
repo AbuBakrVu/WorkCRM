@@ -5,10 +5,11 @@ import { useApp, useLoad, useStored } from '../lib/store';
 import { api } from '../lib/api';
 import { INVOICE_STATUS, VAT_MODE, VAT_RATES } from '../lib/constants';
 import { fmtRub, fmtMoneyShort, fmtDate, todayStr, toDateStr, plural } from '../lib/format';
-import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, Stat, Segmented, StatusDot, cx, nameOptions } from '../components/ui';
+import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, Stat, Segmented, StatusDot, cx } from '../components/ui';
 import { ItemsEditor, badItem, itemsBody, itemsFromServer } from '../components/ItemsEditor';
 import { HistoryPanel } from '../components/History';
 import { DocumentsPanel } from '../components/Documents';
+import { ClientSelect } from '../components/ClientForm';
 
 const addDays = (s, n) => { const d = new Date(s); d.setDate(d.getDate() + n); return toDateStr(d); };
 const TABS = { all: 'Все', unpaid: 'Ждут оплаты', overdue: 'Просроченные', paid: 'Оплаченные', cancelled: 'Отменённые' };
@@ -194,7 +195,7 @@ export function InvoiceDrawer({ id, onClose, onEdit, onChanged }) {
 
 /* ---------- Новый / редактирование счёта ---------- */
 export function InvoiceModal({ invoice, onClose, onSaved }) {
-  const { clients, toast, bump } = useApp();
+  const { toast, bump } = useApp();
   const [companies, setCompanies] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [deals, setDeals] = useState([]);
@@ -234,7 +235,7 @@ export function InvoiceModal({ invoice, onClose, onSaved }) {
       footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={save}>{f.id ? 'Сохранить' : 'Выставить счёт'}</Button></>}>
       <div className="space-y-5" onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-          <Field label="Клиент" className="col-span-2"><Select value={f.client_id} onChange={set('client_id')} placeholder="Выберите клиента" search options={nameOptions(clients)} /></Field>
+          <Field label="Клиент" className="col-span-2"><ClientSelect value={f.client_id} onChange={set('client_id')} placeholder="Выберите клиента" /></Field>
           <Field label="От компании" className="col-span-2"><Select value={f.company_id} onChange={set('company_id')} placeholder="—" search options={companies.map((c) => ({ value: c.id, label: c.name, hint: c.inn ? `ИНН ${c.inn}` : undefined }))} /></Field>
           <Field label="Номер" hint={f.id ? undefined : 'Пусто — следующий по порядку'}><input className="input" value={f.number || ''} onChange={set('number')} placeholder="авто" /></Field>
           <Field label="Дата"><input type="date" className="input" value={f.date || ''} onChange={set('date')} /></Field>
@@ -317,7 +318,7 @@ export function Schedules() {
 }
 
 function ScheduleModal({ s, onClose, onSaved }) {
-  const { clients, toast } = useApp();
+  const { toast } = useApp();
   const [companies, setCompanies] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [f, setF] = useState(null);
@@ -346,7 +347,7 @@ function ScheduleModal({ s, onClose, onSaved }) {
       footer={<>{f.id && <div className="mr-auto"><ConfirmButton onConfirm={remove} /></div>}<Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={save}>Сохранить</Button></>}>
       <div className="space-y-5">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-          <Field label="Клиент" className="col-span-2"><Select value={f.client_id} onChange={set('client_id')} placeholder="Выберите клиента" search options={nameOptions(clients)} /></Field>
+          <Field label="Клиент" className="col-span-2"><ClientSelect value={f.client_id} onChange={set('client_id')} placeholder="Выберите клиента" /></Field>
           <Field label="От компании" className="col-span-2"><Select value={f.company_id} onChange={set('company_id')} placeholder="—" options={companies.map((c) => ({ value: c.id, label: c.name }))} /></Field>
           <Field label="Назначение" className="col-span-2"><input className="input" value={f.title || ''} onChange={set('title')} placeholder="Абонентское обслуживание" /></Field>
           <Field label="Число месяца"><input type="number" min="1" max="31" className="input" value={f.monthday} onChange={set('monthday')} /></Field>

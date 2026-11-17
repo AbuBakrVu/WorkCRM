@@ -3,7 +3,9 @@ import { Plus, ChevronLeft, ChevronRight, Clock, Pencil, FileClock, Printer } fr
 import { useApp, useLoad } from '../lib/store';
 import { api } from '../lib/api';
 import { fmtRub, fmtDate, fmtHM} from '../lib/format';
-import { Button, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, cx, nameOptions } from './ui';
+import { Button, Card, Empty, Spinner, Drawer, Modal, Field, ConfirmButton, cx } from './ui';
+import { ClientSelect } from './ClientForm';
+import { ProjectSelect } from './ProjectForm';
 
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 export const monthLabel = (m) => { const [y, mm] = m.split('-').map(Number); return `${MONTHS[mm - 1]} ${y}`; };
@@ -75,7 +77,7 @@ export function ContractsView() {
 }
 
 function ContractModal({ k, onClose, onSaved }) {
-  const { clients, projects, toast } = useApp();
+  const { toast } = useApp();
   const [f, setF] = useState({ hours_limit: 20, active: 1, ...k });
   const set = (key) => (v) => setF((x) => ({ ...x, [key]: v?.target ? (v.target.type === 'checkbox' ? v.target.checked : v.target.value) : v }));
   const save = async () => {
@@ -89,8 +91,8 @@ function ContractModal({ k, onClose, onSaved }) {
     <Modal open onClose={onClose} title={f.id ? 'Абонентский договор' : 'Новый абонентский договор'} width={600}
       footer={<>{f.id && <div className="mr-auto"><ConfirmButton onConfirm={remove} /></div>}<Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={save}>Сохранить</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
-        <Field label="Клиент"><Select value={f.client_id} onChange={set('client_id')} placeholder="—" search options={nameOptions(clients)} /></Field>
-        <Field label="Проект" hint="Если работа по клиенту ведётся в проекте"><Select value={f.project_id} onChange={set('project_id')} placeholder="—" search options={nameOptions(projects)} /></Field>
+        <Field label="Клиент"><ClientSelect value={f.client_id} onChange={set('client_id')} placeholder="—" /></Field>
+        <Field label="Проект" hint="Если работа по клиенту ведётся в проекте"><ProjectSelect value={f.project_id} onChange={set('project_id')} placeholder="—" initial={f.client_id ? { client_id: +f.client_id } : undefined} /></Field>
         <Field label="Название" className="col-span-2"><input className="input" value={f.title || ''} onChange={set('title')} placeholder="Абонентское обслуживание, до 20 ПК" /></Field>
         <Field label="Часов в месяц"><input type="number" min="0" step="0.5" className="input" value={f.hours_limit} onChange={set('hours_limit')} /></Field>
         <Field label="Абонплата, ₽/мес"><input type="number" min="0" className="input" value={f.monthly_fee || ''} onChange={set('monthly_fee')} /></Field>
