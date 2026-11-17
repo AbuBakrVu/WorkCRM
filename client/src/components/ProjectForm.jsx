@@ -8,7 +8,7 @@ import { ClientSelect } from './ClientForm';
 
 // Проект = обслуживаемая организация (Минфин, университет, СДЭК…)
 export function ProjectFormModal({ open, onClose, onSaved, project, initial }) {
-  const { users, user, toast, bump, isManager } = useApp();
+  const { users, clients, user, toast, bump, isManager } = useApp();
   const [f, setF] = useState({});
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -19,10 +19,16 @@ export function ProjectFormModal({ open, onClose, onSaved, project, initial }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, project, user.id]);
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
+  // При выборе клиента подставляем его название, если название проекта пустое или было подставлено автоматически
+  const pickClient = (id, created) => setF((x) => {
+    const next = created?.name || clients.find((c) => String(c.id) === String(id))?.name;
+    const auto = !x.name?.trim() || x.name === x._autoName;
+    return { ...x, client_id: id, ...(auto && next ? { name: next, _autoName: next } : {}) };
+  });
 
   const submit = async (e) => {
     e?.preventDefault(); e?.stopPropagation();
-    if (!f.name?.trim()) return toast('Укажите название организации', 'error');
+    if (!f.name?.trim()) return toast('Укажите название проекта', 'error');
     setBusy(true);
     try {
       const body = { name: f.name.trim(), description: f.description, status: f.status, client_id: f.client_id ? +f.client_id : null,
@@ -46,7 +52,10 @@ export function ProjectFormModal({ open, onClose, onSaved, project, initial }) {
         <Button variant="primary" onClick={submit} disabled={busy}>{project ? 'Сохранить' : 'Создать проект'}</Button>
       </>}>
       <form onSubmit={submit} className="space-y-3.5">
-        <Field label="Организация" hint="Например: Министерство финансов ЧР, СДЭК, ЧГУ">
+        <Field label="Клиент" hint="Кто платит — из раздела «Клиенты». Можно не указывать">
+          <ClientSelect value={f.client_id} onChange={pickClient} placeholder="—" />
+        </Field>
+        <Field label="Название проекта" hint="Как вы называете объект в работе: «СДЭК», «ЧГУ — общежития»">
           <input className="input" value={f.name || ''} onChange={set('name')} autoFocus />
         </Field>
         <Field label="Описание"><textarea className="input" rows={3} value={f.description || ''} onChange={set('description')} placeholder="Что обслуживаем, контакты, адрес" /></Field>
@@ -61,7 +70,6 @@ export function ProjectFormModal({ open, onClose, onSaved, project, initial }) {
         {more && (
           <div className="grid grid-cols-2 gap-3.5">
             <Field label="Статус"><Select value={f.status} onChange={set('status')} options={Object.entries(PROJECT_STATUS).map(([value, s]) => ({ value, label: s.label }))} /></Field>
-            <Field label="Клиент (раздел «Клиенты»)"><ClientSelect value={f.client_id} onChange={set('client_id')} /></Field>
             <Field label="Начало"><input type="date" className="input" value={f.start_date || ''} onChange={set('start_date')} /></Field>
             <Field label="Срок договора"><input type="date" className="input" value={f.due_date || ''} onChange={set('due_date')} /></Field>
             <Field label="Бюджет, ₽"><input type="number" min="0" className="input" value={f.budget || ''} onChange={set('budget')} /></Field>

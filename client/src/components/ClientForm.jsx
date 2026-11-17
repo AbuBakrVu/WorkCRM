@@ -49,7 +49,7 @@ export function ClientSelect({ value, onChange, placeholder, ...rest }) {
     <>
       <Select value={value} onChange={onChange} placeholder={placeholder} search options={list.map((x) => ({ value: x.id, label: x.name }))}
         onCreate={(q) => setCreating({ type: 'company', name: q })} createLabel="Новый клиент" {...rest} />
-      <ClientFormModal client={creating} onClose={() => setCreating(null)} onSaved={(c) => { setExtra(c); onChange(String(c.id)); }} />
+      <ClientFormModal client={creating} onClose={() => setCreating(null)} onSaved={(c) => { setExtra(c); onChange(String(c.id), c); }} />
     </>
   );
 }
