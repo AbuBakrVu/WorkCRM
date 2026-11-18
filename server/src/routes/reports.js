@@ -1,4 +1,4 @@
-import { all, get } from '../db.js';
+import { all, get, run } from '../db.js';
 import { todayMsk } from '../recurrence.js';
 import { requireRole } from '../auth.js';
 import { api, bad, notFound, wrap } from './shared.js';
@@ -61,6 +61,13 @@ api.get('/reports/profit', requireRole('admin', 'manager'), wrap((req) => {
 
 // Отчёт для клиента: что сделано за период (для печати / PDF)
 api.get('/reports/client', requireRole('admin', 'manager'), wrap((req) => buildClientReport(req.query)));
+// Скрыть / показать комментарий записей времени в отчёте для клиента
+api.post('/reports/client/note-visibility', requireRole('admin', 'manager'), wrap((req) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Boolean);
+  if (!ids.length) throw bad('Не выбраны записи');
+  run(`UPDATE time_entries SET hide_note = ? WHERE id IN (${ids.map(() => '?').join(',')})`, req.body.hidden ? 1 : 0, ...ids);
+  return { ok: true };
+}));
 export function buildClientReport(query, forPortal = false) {
   const { from, to } = period(query);
   let contract = null;
@@ -84,13 +91,29 @@ export function buildClientReport(query, forPortal = false) {
   const work = all(`SELECT e.task_id, e.ticket_id, COALESCE(tk.title, e.task_title) task_title, tk.status task_status,
       COALESCE(t.title, e.ticket_title) ticket_title, t.status ticket_status,
       SUM(e.duration_sec) sec, MIN(${MSK('e.started_at')}) first_day, MAX(${MSK('e.started_at')}) last_day,
-      GROUP_CONCAT(DISTINCT u.name) people, GROUP_CONCAT(e.description, '\u0001') notes
+      GROUP_CONCAT(DISTINCT u.name) people,
+      GROUP_CONCAT(e.id || '\u0002' || e.hide_note || '\u0002' || COALESCE(e.description, ''), '\u0001') items
     FROM time_entries e JOIN users u ON u.id = e.user_id LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
     LEFT JOIN tasks tk ON tk.id = e.task_id
     WHERE e.ended_at IS NOT NULL AND ${MSK('e.started_at')} BETWEEN ? AND ? AND ${match}
     GROUP BY e.task_id, e.ticket_id, CASE WHEN e.task_id IS NULL THEN e.task_title END, CASE WHEN e.ticket_id IS NULL THEN e.ticket_title END
     ORDER BY last_day DESC`, from, to, ...margs)
-    .map((w) => ({ ...w, notes: [...new Set(String(w.notes || '').split('\u0001').map((x) => x.trim()).filter(Boolean))].slice(0, 8) }));
+    .map(({ items, ...w }) => {
+      // Комментарии к работе: одинаковые объединяем; совпадающий с названием задачи/заявки не показываем
+      const title = (w.task_title || w.ticket_title || '').trim().toLowerCase();
+      const byText = new Map();
+      for (const it of String(items || '').split('\u0001')) {
+        const [id, hidden, ...rest] = it.split('\u0002');
+        const text = rest.join('\u0002').trim();
+        if (!text || text.toLowerCase() === title) continue;
+        const n = byText.get(text) || byText.set(text, { text, ids: [], hidden: true }).get(text);
+        n.ids.push(Number(id));
+        if (hidden !== '1') n.hidden = false;
+      }
+      const notes = [...byText.values()];
+      // Клиенту (личный кабинет) — только видимые, текстом; сотрудникам — все, с признаком и id записей для переключения
+      return { ...w, notes: forPortal ? notes.filter((n) => !n.hidden).map((n) => n.text) : notes };
+    });
   // Итоги по закрытым задачам (отчёт «с каким итогом закрыта»)
   const closed = all(`SELECT tk.id, tk.title, tk.completed_at,
       (SELECT c.body FROM task_comments c WHERE c.task_id = tk.id AND c.report = 'close' ORDER BY c.id DESC LIMIT 1) result

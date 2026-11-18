@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Printer } from 'lucide-react';
+import { Printer, Eye, EyeOff } from 'lucide-react';
 import { api, fileUrl } from '../lib/api';
 import { fmtDate, fmtHM } from '../lib/format';
 import { Spinner } from '../components/ui';
@@ -14,6 +14,7 @@ export default function ClientReport({ portal = false }) {
   const [params] = useSearchParams();
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
+  const [showNotes, setShowNotes] = useState(true);
   useEffect(() => {
     const q = new URLSearchParams(params);
     if (q.get('contract') && q.get('month')) { // из абонентского договора: весь месяц
@@ -29,11 +30,28 @@ export default function ClientReport({ portal = false }) {
   const who = d.client?.full_name || d.client?.name || d.project?.name;
   const k = d.contract;
   const usedH = d.total_sec / 3600;
+  // Комментарий скрывается для всех записей времени с этим текстом; в печать и в личный кабинет скрытые не попадают
+  const toggleNote = async (wi, ni) => {
+    const n = d.work[wi].notes[ni];
+    const hidden = !n.hidden;
+    setD((x) => ({ ...x, work: x.work.map((w, i) => i !== wi ? w : { ...w, notes: w.notes.map((m, j) => j !== ni ? m : { ...m, hidden }) }) }));
+    try { await api.post('/reports/client/note-visibility', { ids: n.ids, hidden }); }
+    catch (e) { alert(e.message); setD((x) => ({ ...x, work: x.work.map((w, i) => i !== wi ? w : { ...w, notes: w.notes.map((m, j) => j !== ni ? m : { ...m, hidden: !hidden }) }) })); }
+  };
+  const hasNotes = d.work.some((w) => w.notes.length);
   return (
     <div className="report-page min-h-full bg-canvas py-8 print:py-0 print:bg-white">
       <style>{`@media print { @page { size: A4; margin: 14mm 12mm; } .no-print { display: none !important; } html, body { background: #fff !important; } }
         .report-page { color-scheme: light; } .report-sheet { --color-ink: #17201b; --color-ink-2: #48524c; --color-ink-3: #879088; --color-line: #e3e8e4; }`}</style>
-      <div className="no-print max-w-[820px] mx-auto mb-4 flex justify-end gap-2 px-4">
+      <div className="no-print max-w-[820px] mx-auto mb-4 flex flex-wrap items-center justify-end gap-3 px-4">
+        {!portal && hasNotes && (
+          <>
+            <span className="text-[12.5px] text-ink-3 mr-auto">Нажмите на комментарий к работе, чтобы скрыть его из отчёта</span>
+            <label className="inline-flex items-center gap-2 text-[13px] text-ink-2 cursor-pointer select-none">
+              <input type="checkbox" checked={showNotes} onChange={(e) => setShowNotes(e.target.checked)} className="accent-[#1e6a45]" />Комментарии к работам
+            </label>
+          </>
+        )}
         <button onClick={() => window.print()} className="inline-flex items-center gap-2 h-10 px-4 rounded-full bg-brand text-white font-semibold text-[13.5px]"><Printer size={16} />Печать / сохранить в PDF</button>
       </div>
       <div className="report-sheet max-w-[820px] mx-auto bg-white text-[#17201b] shadow-xl print:shadow-none rounded-2xl print:rounded-none p-10 print:p-0 text-[13px] leading-relaxed">
@@ -93,7 +111,21 @@ export default function ClientReport({ portal = false }) {
                   <tr key={i} className="border-b border-[#e3e8e4] align-top break-inside-avoid">
                     <td className="py-2 pr-4">
                       <div className="font-medium">{w.task_title || (w.ticket_id ? `Заявка № ${w.ticket_id}. ${w.ticket_title}` : 'Прочие работы')}</div>
-                      {w.notes.length > 0 && <ul className="text-[12px] text-[#48524c] mt-0.5 list-disc pl-4">{w.notes.map((n, j) => <li key={j}>{n}</li>)}</ul>}
+                      {showNotes && w.notes.length > 0 && (portal
+                        ? <ul className="text-[12px] text-[#48524c] mt-0.5 list-disc pl-4">{w.notes.map((n, j) => <li key={j}>{n}</li>)}</ul>
+                        : (
+                          <ul className={`text-[12px] text-[#48524c] mt-0.5 pl-4 ${w.notes.every((n) => n.hidden) ? 'print:hidden' : ''}`}>
+                            {w.notes.map((n, j) => (
+                              <li key={j} className={`group list-disc ${n.hidden ? 'print:hidden' : ''}`}>
+                                <button type="button" onClick={() => toggleNote(i, j)} title={n.hidden ? 'Показать в отчёте' : 'Скрыть из отчёта'}
+                                  className={`inline-flex items-center gap-1.5 text-left rounded hover:bg-[#f1f4f2] print:hover:bg-transparent ${n.hidden ? 'text-[#b5bcb7] line-through' : ''}`}>
+                                  <span>{n.text}</span>
+                                  <span className="no-print opacity-0 group-hover:opacity-100 text-[#879088]">{n.hidden ? <Eye size={13} /> : <EyeOff size={13} />}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ))}
                     </td>
                     <td className="py-2 pr-4 whitespace-nowrap text-[#48524c]">{w.first_day === w.last_day ? fmtDate(w.first_day, true) : `${fmtDate(w.first_day)} — ${fmtDate(w.last_day, true)}`}</td>
                     <td className="py-2 text-right whitespace-nowrap tabular font-medium">{fmtHM(w.sec)}</td>

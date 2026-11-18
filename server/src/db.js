@@ -605,6 +605,10 @@ const MIGRATIONS = [
         WHERE ticket_id = NEW.id;
       END;`);
   },
+  // 20. Комментарий записи времени можно скрыть из отчёта для клиента (часы при этом учитываются)
+  (d) => {
+    addColumn(d, 'time_entries', 'hide_note', 'INTEGER NOT NULL DEFAULT 0');
+  },
 ];
 
 {
