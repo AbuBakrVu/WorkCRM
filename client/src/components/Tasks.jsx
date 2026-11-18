@@ -369,6 +369,14 @@ export function TaskDrawer({ id: rootId, onClose }) {
                     {late && <Pill color="#b91c1c" bg="#fee2e2">{late}</Pill>}
                   </div>
                 </Row>
+                <Row label="Дата в отчёте">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {perms.edit ? (
+                      <DueDateInput value={t.report_date} onSave={(v) => patch({ report_date: v })} className="input !h-8 !w-auto !rounded-full" />
+                    ) : <span className="text-[13px] text-ink">{t.report_date ? fmtDate(t.report_date, true) : '—'}</span>}
+                    {!t.report_date && <span className="text-[12px] text-ink-3">не указана — в отчёте даты работ</span>}
+                  </div>
+                </Row>
                 <Row label="Создана"><span className="text-[13px] text-ink">{fmtDateTime(t.created_at)}</span></Row>
                 {t.completed_at && <Row label="Закрыта"><span className="text-[13px] text-ink">{fmtDateTime(t.completed_at)}</span></Row>}
                 <Row label="Затрачено"><TimeLog total={t.tracked_sec} target={{ task_id: t.id, project_id: t.project_id }} /></Row>

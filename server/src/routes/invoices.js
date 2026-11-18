@@ -236,9 +236,11 @@ const CONTRACT_ENTRIES = `FROM time_entries e
   LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
   WHERE e.ended_at IS NOT NULL AND strftime('%Y-%m', datetime(e.started_at, '+3 hours')) = ?
     AND ((? IS NOT NULL AND (e.project_id = ? OR t.project_id = ?)) OR (? IS NOT NULL AND (p.client_id = ? OR t.client_id = ? OR e.client_id = ?)))`;
+export const BILL_SEC = 'CAST(ROUND(e.duration_sec / 60.0) AS INTEGER) * 60';
 const contractArgs = (k, month) => [month, k.project_id, k.project_id, k.project_id, k.client_id, k.client_id, k.client_id, k.client_id];
 export function contractUsage(k, month) {
-  const used = get(`SELECT COALESCE(SUM(e.duration_sec),0) s ${CONTRACT_ENTRIES}`, ...contractArgs(k, month)).s;
+  // Секунды не считаем: каждая запись округляется до минуты (BILL_SEC)
+  const used = get(`SELECT COALESCE(SUM(${BILL_SEC}),0) s ${CONTRACT_ENTRIES}`, ...contractArgs(k, month)).s;
   const usedH = used / 3600;
   const over = Math.max(0, usedH - k.hours_limit);
   return { month, used_sec: used, used_hours: Math.round(usedH * 100) / 100, over_hours: Math.round(over * 100) / 100,

@@ -7,7 +7,7 @@ import { Avatar, cx } from './ui';
 
 const FIELDS = {
   title: 'Название', name: 'Название', description: 'Описание', status: 'Статус', stage: 'Этап', assignee_id: 'Исполнитель', owner_id: 'Ответственный',
-  due_date: 'Срок', start_date: 'Начало', client_id: 'Клиент', project_id: 'Проект', company_id: 'Компания', deal_id: 'Сделка', parent_id: 'Родительская задача',
+  due_date: 'Срок', report_date: 'Дата в отчёте', start_date: 'Начало', client_id: 'Клиент', project_id: 'Проект', company_id: 'Компания', deal_id: 'Сделка', parent_id: 'Родительская задача',
   priority: 'Приоритет', category: 'Категория', location: 'Место', requester: 'Заявитель', resolution: 'Решение', expected_close: 'Ожидаемое закрытие',
   notes: 'Заметки', probability: 'Вероятность', lost_reason: 'Причина проигрыша', lost_comment: 'Комментарий к проигрышу', vat_mode: 'НДС',
   contract_no: 'Номер договора', contract_date: 'Дата договора', number: 'Номер', date: 'Дата', cancelled: 'Отменён',

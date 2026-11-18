@@ -609,6 +609,10 @@ const MIGRATIONS = [
   (d) => {
     addColumn(d, 'time_entries', 'hide_note', 'INTEGER NOT NULL DEFAULT 0');
   },
+  // 21. Задача: дата, которая выводится в отчёте для клиента вместо дат записей времени
+  (d) => {
+    addColumn(d, 'tasks', 'report_date', 'TEXT');
+  },
 ];
 
 {

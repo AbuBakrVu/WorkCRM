@@ -86,7 +86,7 @@ export default function ClientReport({ portal = false }) {
           <Sect title="Выполненные задачи">
             {d.closed.map((t) => (
               <div key={t.id} className="py-2.5 border-b border-[#e3e8e4] last:border-0 break-inside-avoid">
-                <div className="flex justify-between gap-4"><span className="font-semibold">{t.title}</span><span className="text-[#879088] shrink-0">{fmtDate(t.completed_at, true)}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold">{t.title}</span><span className="text-[#879088] shrink-0">{fmtDate(t.report_date || t.completed_at, true)}</span></div>
                 {t.result && <div className="text-[#48524c] mt-0.5 whitespace-pre-wrap">{t.result}</div>}
               </div>
             ))}
@@ -127,7 +127,7 @@ export default function ClientReport({ portal = false }) {
                           </ul>
                         ))}
                     </td>
-                    <td className="py-2 pr-4 whitespace-nowrap text-[#48524c]">{w.first_day === w.last_day ? fmtDate(w.first_day, true) : `${fmtDate(w.first_day)} — ${fmtDate(w.last_day, true)}`}</td>
+                    <td className="py-2 pr-4 whitespace-nowrap text-[#48524c]">{w.report_date ? fmtDate(w.report_date, true) : w.first_day === w.last_day ? fmtDate(w.first_day, true) : `${fmtDate(w.first_day)} — ${fmtDate(w.last_day, true)}`}</td>
                     <td className="py-2 text-right whitespace-nowrap tabular font-medium">{fmtHM(w.sec)}</td>
                   </tr>
                 ))}

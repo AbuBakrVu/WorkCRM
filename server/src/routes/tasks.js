@@ -9,7 +9,7 @@ import { api, HttpError, bad, notFound, wrap, pick, insert, update, idParam, req
 import { stopRunning, timerState } from './time.js';
 
 /* ---------- tasks ---------- */
-const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'position', 'parent_id'];
+const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'report_date', 'position', 'parent_id'];
 export const TASK_SELECT = `SELECT t.*, u.name assignee_name, u.color assignee_color, p.name project_name, cb.name creator_name, cb.color creator_color,
     (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.task_id = t.id) tracked_sec,
     (SELECT COUNT(*) FROM task_comments c WHERE c.task_id = t.id AND c.kind = 'text') comments_count,
@@ -83,10 +83,10 @@ function taskDetails(t) {
   };
 }
 // Крайний срок — настоящая дата YYYY-MM-DD с годом 2000–2100 (защита от «0002» при наборе года)
-function checkDue(d) {
+function checkDue(d, what = 'крайнего срока') {
   if (d == null || d === '') return;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d));
-  if (!m || +m[1] < 2000 || +m[1] > 2100 || Number.isNaN(Date.parse(d))) throw bad('Некорректная дата крайнего срока');
+  if (!m || +m[1] < 2000 || +m[1] > 2100 || Number.isNaN(Date.parse(d))) throw bad(`Некорректная дата ${what}`);
 }
 // Родитель подзадачи: из того же проекта, не сама задача и без циклов
 function checkParent(taskId, parentId, projectId) {
@@ -129,6 +129,7 @@ api.put('/tasks/:id', wrap((req) => {
   if (!before) throw notFound();
   const data = pick(req.body, TASK_FIELDS);
   if ('due_date' in data) checkDue(data.due_date);
+  if ('report_date' in data) { if (data.report_date === '') data.report_date = null; checkDue(data.report_date, 'в отчёте'); }
   const perms = taskPerms(req.user, before);
   if ('parent_id' in data) checkParent(id, data.parent_id, data.project_id ?? before.project_id);
   const statusChange = data.status && data.status !== before.status;

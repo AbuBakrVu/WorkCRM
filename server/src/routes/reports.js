@@ -2,7 +2,7 @@ import { all, get, run } from '../db.js';
 import { todayMsk } from '../recurrence.js';
 import { requireRole } from '../auth.js';
 import { api, bad, notFound, wrap } from './shared.js';
-import { CONTRACT_SELECT, isDate } from './invoices.js';
+import { CONTRACT_SELECT, BILL_SEC, isDate } from './invoices.js';
 
 /* ---------- отчёты ---------- */
 // Период по МСК: from/to — YYYY-MM-DD включительно (по умолчанию текущий месяц)
@@ -90,7 +90,7 @@ export function buildClientReport(query, forPortal = false) {
   // Удалённые задачи/заявки группируем по сохранённому названию
   const work = all(`SELECT e.task_id, e.ticket_id, COALESCE(tk.title, e.task_title) task_title, tk.status task_status,
       COALESCE(t.title, e.ticket_title) ticket_title, t.status ticket_status,
-      SUM(e.duration_sec) sec, MIN(${MSK('e.started_at')}) first_day, MAX(${MSK('e.started_at')}) last_day,
+      SUM(${BILL_SEC}) sec, MIN(${MSK('e.started_at')}) first_day, MAX(${MSK('e.started_at')}) last_day, tk.report_date,
       GROUP_CONCAT(DISTINCT u.name) people,
       GROUP_CONCAT(e.id || '\u0002' || e.hide_note || '\u0002' || COALESCE(e.description, ''), '\u0001') items
     FROM time_entries e JOIN users u ON u.id = e.user_id LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
@@ -113,9 +113,10 @@ export function buildClientReport(query, forPortal = false) {
       const notes = [...byText.values()];
       // Клиенту (личный кабинет) — только видимые, текстом; сотрудникам — все, с признаком и id записей для переключения
       return { ...w, notes: forPortal ? notes.filter((n) => !n.hidden).map((n) => n.text) : notes };
-    });
+    })
+    .filter((w) => w.sec > 0); // работы короче минуты в отчёт не попадают
   // Итоги по закрытым задачам (отчёт «с каким итогом закрыта»)
-  const closed = all(`SELECT tk.id, tk.title, tk.completed_at,
+  const closed = all(`SELECT tk.id, tk.title, tk.completed_at, tk.report_date,
       (SELECT c.body FROM task_comments c WHERE c.task_id = tk.id AND c.report = 'close' ORDER BY c.id DESC LIMIT 1) result
     FROM tasks tk JOIN projects p ON p.id = tk.project_id
     WHERE tk.status = 'done' AND ${MSK('tk.completed_at')} BETWEEN ? AND ? AND ((? IS NOT NULL AND tk.project_id = ?) OR (? IS NOT NULL AND p.client_id = ?))
