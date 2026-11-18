@@ -41,7 +41,9 @@ export default function ClientReport({ portal = false }) {
   const hasNotes = d.work.some((w) => w.notes.length);
   return (
     <div className="report-page min-h-full bg-canvas py-8 print:py-0 print:bg-white">
-      <style>{`@media print { @page { size: A4; margin: 14mm 12mm; } .no-print { display: none !important; } html, body { background: #fff !important; } }
+      {/* Поля страницы = 0: браузер не печатает колонтитулы (дату, адрес, номер страницы); отступы — внутри листа, повторяются на каждой странице */}
+      <style>{`@media print { @page { size: A4; margin: 0; } .no-print { display: none !important; } html, body { background: #fff !important; }
+          .report-sheet { padding: 14mm 12mm !important; max-width: none !important; box-decoration-break: clone; -webkit-box-decoration-break: clone; } }
         .report-page { color-scheme: light; } .report-sheet { --color-ink: #17201b; --color-ink-2: #48524c; --color-ink-3: #879088; --color-line: #e3e8e4; }`}</style>
       <div className="no-print max-w-[820px] mx-auto mb-4 flex flex-wrap items-center justify-end gap-3 px-4">
         {!portal && hasNotes && (
