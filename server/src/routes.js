@@ -3,6 +3,7 @@ import './routes/auth.js';
 import './routes/clients.js';
 import './routes/tasks.js';
 import './routes/tickets.js';
+import './routes/messengers.js';
 import './routes/companies.js';
 import './routes/deals.js';
 import './routes/invoices.js';
@@ -19,6 +20,7 @@ import { HttpError } from './routes/shared.js';
 export { getSetting } from './routes/companies.js';
 export { nextDocNumber, runInvoiceSchedules } from './routes/invoices.js';
 export { mentionedUsers, purgeNotifications, runRecurrences } from './routes/tasks.js';
+export { startMessengers, runSlaAlerts } from './routes/messengers.js';
 
 /* ---------- errors ---------- */
 api.use((req, res) => res.status(404).json({ error: 'Маршрут не найден' }));

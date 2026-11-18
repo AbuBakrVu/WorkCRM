@@ -13,6 +13,7 @@ import { TemplatesSettings } from '../components/Documents';
 import { TrashSettings, shortUA } from '../components/Trash';
 import { fmtDateTime } from '../lib/format';
 import { useLoad } from '../lib/store';
+import { ProjectSelect } from '../components/ProjectForm';
 
 export default function Settings() {
   const { user, isManager } = useApp();
@@ -73,12 +74,122 @@ function Profile() {
           <div className="sm:col-span-2"><Button variant="dark" disabled={!pw.new_password}>Изменить пароль</Button></div>
         </form>
       </Card>
+      <MyTelegram />
       <MyLogins />
     </div>
   );
 }
 
 function Integrations() {
+  return <div className="space-y-4"><Messengers /><DaData /></div>;
+}
+
+const ChannelState = ({ s, okText }) => (
+  <span className={cx('inline-flex items-center gap-1.5 text-[12px] font-medium', s?.connected ? 'text-emerald-600' : s?.error ? 'text-red-600' : 'text-ink-3')}>
+    <span className={cx('size-2 rounded-full', s?.connected ? 'bg-emerald-500' : s?.error ? 'bg-red-500' : 'bg-line')} />
+    {s?.connected ? okText : s?.error ? s.error : 'не подключено'}
+  </span>
+);
+
+function Messengers() {
+  const { toast } = useApp();
+  const [d, setD] = useState(null);
+  const [f, setF] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [testPhone, setTestPhone] = useState('');
+  const load = () => api.get('/messengers').then((r) => { setD(r); setF(r.settings); }).catch((e) => toast(e.message, 'error'));
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!d) return null;
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
+  const save = async () => {
+    setBusy(true);
+    try { await api.put('/messengers', f); toast('Сохранено'); await load(); } catch (e) { toast(e.message, 'error'); }
+    setBusy(false);
+  };
+  const check = async () => { try { const r = await api.post('/messengers/check'); setD((x) => ({ ...x, state: r.state })); } catch (e) { toast(e.message, 'error'); } };
+  const test = async () => { try { await api.post('/messengers/whatsapp/test', { phone: testPhone }); toast('Сообщение отправлено'); } catch (e) { toast(e.message, 'error'); } };
+  const st = d.state;
+  return (
+    <>
+      <Card className="p-6">
+        <div className="flex items-center gap-3">
+          <h2 className="text-[15px] font-semibold">Telegram-бот</h2>
+          <ChannelState s={st.telegram} okText={`работает${st.telegram.bot ? ` · @${st.telegram.bot}` : ''}`} />
+        </div>
+        <p className="text-[13px] text-ink-2 mt-1 mb-4">Клиенты пишут боту — создаётся заявка, ответы из карточки заявки приходят им от бота. Через этого же бота сотрудники получают уведомления (подключают в своём профиле).
+          Создайте бота у <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-violet hover:underline">@BotFather</a> командой <code>/newbot</code> и вставьте выданный токен.</p>
+        <div className="max-w-[520px]"><Field label="Токен бота"><input className="input" value={f.tg_token || ''} onChange={set('tg_token')} placeholder="123456789:AA…" autoComplete="off" /></Field></div>
+        {st.telegram.bot && <p className="text-[12.5px] text-ink-3 mt-2">Ссылка для клиентов: <a href={`https://t.me/${st.telegram.bot}`} target="_blank" rel="noreferrer" className="text-violet hover:underline">t.me/{st.telegram.bot}</a></p>}
+      </Card>
+
+      <Card className="p-6">
+        <div className="flex items-center gap-3">
+          <h2 className="text-[15px] font-semibold">WhatsApp — Green API</h2>
+          <ChannelState s={st.whatsapp} okText="номер авторизован" />
+        </div>
+        <p className="text-[13px] text-ink-2 mt-1 mb-4">Зарегистрируйтесь на <a href="https://green-api.com" target="_blank" rel="noreferrer" className="text-violet hover:underline">green-api.com</a>, создайте инстанс и отсканируйте QR-код телефоном с WhatsApp рабочего номера.
+          Скопируйте из личного кабинета apiUrl, idInstance и apiTokenInstance. Поле Webhook URL в Green API оставьте пустым — CRM сама забирает сообщения.</p>
+        <div className="grid sm:grid-cols-3 gap-3.5">
+          <Field label="apiUrl"><input className="input" value={f.wa_api_url || ''} onChange={set('wa_api_url')} placeholder="https://api.green-api.com" /></Field>
+          <Field label="idInstance"><input className="input" value={f.wa_id_instance || ''} onChange={set('wa_id_instance')} placeholder="1101000001" /></Field>
+          <Field label="apiTokenInstance"><input className="input" value={f.wa_api_token || ''} onChange={set('wa_api_token')} autoComplete="off" /></Field>
+        </div>
+        {st.whatsapp.connected && (
+          <div className="flex gap-2 mt-3 max-w-[520px]">
+            <input className="input" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="Ваш номер для проверки: 7928…" />
+            <Button onClick={test}>Пробное сообщение</Button>
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="text-[15px] font-semibold">Сообщения клиентам</h2>
+        <p className="text-[13px] text-ink-2 mt-1 mb-4">Каждое новое обращение создаёт заявку; следующие сообщения добавляются в неё, пока заявка открыта. <code>{'{номер}'}</code> заменяется номером заявки. Пустое поле — сообщение не отправляется.</p>
+        <div className="grid gap-3.5">
+          <Field label="Приветствие в Telegram (на /start)"><textarea className="input" rows={2} value={f.msg_greeting || ''} onChange={set('msg_greeting')} placeholder="Здравствуйте! Опишите, пожалуйста, вашу проблему или вопрос — мы создадим заявку и ответим здесь." /></Field>
+          <Field label="Автоответ при создании заявки"><textarea className="input" rows={2} value={f.msg_autoreply || ''} onChange={set('msg_autoreply')} placeholder="Заявка №{номер} принята. Специалист ответит в ближайшее время." /></Field>
+          <Field label="Сообщение, когда заявка решена"><textarea className="input" rows={2} value={f.msg_resolved || ''} onChange={set('msg_resolved')} placeholder="Заявка №{номер} выполнена. Если вопрос остался — просто напишите сюда." /></Field>
+          <div className="max-w-[420px]"><Field label="Проект для новых заявок" hint="Необязательно"><ProjectSelect value={f.msg_project_id ? +f.msg_project_id : null} onChange={(v) => setF((x) => ({ ...x, msg_project_id: v ? String(v) : '' }))} placeholder="—" /></Field></div>
+        </div>
+        <div className="flex gap-2 mt-5">
+          <Button variant="primary" onClick={save} disabled={busy}>{busy ? 'Сохраняю…' : 'Сохранить'}</Button>
+          <Button onClick={check}>Проверить подключение</Button>
+        </div>
+        {!d.public_url && <p className="text-[12px] text-ink-3 mt-3">Ссылки «Открыть в CRM» в уведомлениях появятся после сохранения настроек с рабочего адреса CRM.</p>}
+      </Card>
+    </>
+  );
+}
+
+function MyTelegram() {
+  const { toast } = useApp();
+  const [d, setD] = useState(null);
+  const load = () => api.get('/messengers/telegram/me').then(setD).catch(() => {});
+  useEffect(() => { load(); }, []);
+  if (!d?.bot) return null;
+  const connect = async () => {
+    try { const { url } = await api.post('/messengers/telegram/link'); window.open(url, '_blank'); toast('Нажмите «Запустить» в Telegram, затем обновите страницу'); } catch (e) { toast(e.message, 'error'); }
+  };
+  const disconnect = async () => { await api.del('/messengers/telegram/link'); load(); };
+  const toggle = async () => { try { await api.put('/auth/me', { tg_notify: !d.notify }); load(); } catch (e) { toast(e.message, 'error'); } };
+  return (
+    <Card className="p-6 mt-4">
+      <h2 className="text-[15px] font-semibold mb-1">Уведомления в Telegram</h2>
+      <p className="text-[12.5px] text-ink-3 mb-3">Новые заявки (для руководителей), назначенные вам задачи и заявки, упоминания, сообщения клиентов и просроченный SLA — от бота @{d.bot}.</p>
+      {d.linked ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-emerald-600 font-medium"><span className="size-2 rounded-full bg-emerald-500" />Подключено</span>
+          <label className="flex items-center gap-2 text-[13px] text-ink-2"><input type="checkbox" checked={d.notify} onChange={toggle} className="accent-[var(--color-brand)]" />Присылать уведомления</label>
+          <Button size="sm" variant="ghost" onClick={disconnect}>Отключить</Button>
+        </div>
+      ) : (
+        <div className="flex gap-2"><Button variant="primary" onClick={connect}>Подключить Telegram</Button><Button onClick={load}>Я подключил</Button></div>
+      )}
+    </Card>
+  );
+}
+
+function DaData() {
   const { toast } = useApp();
   const [f, setF] = useState(null);
   useEffect(() => { api.get('/app-settings').then(setF).catch((e) => toast(e.message, 'error')); }, [toast]);

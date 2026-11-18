@@ -613,6 +613,31 @@ const MIGRATIONS = [
   (d) => {
     addColumn(d, 'tasks', 'report_date', 'TEXT');
   },
+  // 22. Мессенджеры: чаты Telegram/WhatsApp, переписка в заявках, уведомления сотрудникам в Telegram
+  (d) => {
+    d.exec(`CREATE TABLE IF NOT EXISTS messenger_chats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel TEXT NOT NULL CHECK (channel IN ('telegram','whatsapp')),
+      external_id TEXT NOT NULL,
+      name TEXT,
+      phone TEXT,
+      username TEXT,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      last_message_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (channel, external_id)
+    )`);
+    addColumn(d, 'tickets', 'messenger_chat_id', 'INTEGER REFERENCES messenger_chats(id) ON DELETE SET NULL');
+    addColumn(d, 'tickets', 'sla_notified_at', 'TEXT');
+    addColumn(d, 'ticket_comments', 'channel', 'TEXT');
+    addColumn(d, 'ticket_comments', 'inbound', 'INTEGER NOT NULL DEFAULT 0');
+    addColumn(d, 'ticket_comments', 'sender_name', 'TEXT');
+    addColumn(d, 'ticket_comments', 'delivery', 'TEXT');
+    addColumn(d, 'ticket_comments', 'delivery_error', 'TEXT');
+    addColumn(d, 'users', 'tg_chat_id', 'TEXT');
+    addColumn(d, 'users', 'tg_notify', 'INTEGER NOT NULL DEFAULT 1');
+    d.exec('CREATE INDEX IF NOT EXISTS idx_tickets_chat ON tickets(messenger_chat_id)');
+  },
 ];
 
 {

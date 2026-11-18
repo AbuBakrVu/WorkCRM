@@ -31,6 +31,8 @@ const NAV = [
 const TITLES = { '/': 'Дашборд', '/projects': 'Проекты', '/tickets': 'Заявки', '/infra': 'ИТ-инфраструктура',
   '/clients': 'Клиенты', '/pipeline': 'Воронка сделок', '/finance': 'Финансы', '/settings': 'Настройки' };
 
+const NOTIFY_TEXT = { mention: 'упомянул(а) вас', assigned: 'назначено вам', ticket: 'новая заявка из мессенджера', message: 'новое сообщение клиента', sla: 'просрочен SLA' };
+
 export default function Layout() {
   const { user, isManager, projects, logout } = useApp();
   // На широком экране меню по умолчанию раскрыто с подписями; булавка сворачивает его в узкую полосу
@@ -215,7 +217,7 @@ function NotificationsButton({ activity }) {
       {({ close }) => (
         <>
           <div className="flex items-center gap-1 px-1.5 pt-1 pb-2">
-            {[['mentions', 'Упоминания', nt.unread], ['activity', 'События', unreadAct]].map(([v, l, n]) => (
+            {[['mentions', 'Для меня', nt.unread], ['activity', 'События', unreadAct]].map(([v, l, n]) => (
               <button key={v} onClick={() => { setTab(v); if (v === 'activity') setSeen(latest); }}
                 className={cx('h-8 px-3 rounded-full text-[12.5px] font-medium', tab === v ? 'bg-canvas text-ink' : 'text-ink-3 hover:text-ink')}>
                 {l}{n > 0 && <span className="ml-1.5 text-[10.5px] bg-red-500 text-white rounded-full px-1.5 py-0.5">{n}</span>}
@@ -229,14 +231,14 @@ function NotificationsButton({ activity }) {
                 <button key={n.id} onClick={() => open(n, close)} className="w-full text-left flex gap-2.5 px-2.5 py-2 rounded-lg hover:bg-canvas">
                   <Avatar user={{ name: n.from_name || '?', color: n.from_color }} size={26} ring={false} />
                   <div className="min-w-0 flex-1 text-[12.5px] leading-snug">
-                    <div><span className="font-medium text-ink">{n.from_name}</span> <span className="text-ink-2">упомянул(а) вас · {n.entity === 'ticket' ? 'заявка' : 'задача'} «{n.entity_title}»</span></div>
+                    <div>{n.from_name && <span className="font-medium text-ink">{n.from_name} </span>}<span className="text-ink-2">{NOTIFY_TEXT[n.kind] || NOTIFY_TEXT.mention} · {n.entity === 'ticket' ? `заявка #${n.entity_id}` : 'задача'} «{n.entity_title}»</span></div>
                     <div className="text-ink-3 truncate mt-0.5">{n.text}</div>
                     <div className="text-[11px] text-ink-3 mt-0.5">{timeAgo(n.created_at)}</div>
                   </div>
                   {!n.read_at && <span className="size-2 rounded-full bg-violet mt-1.5 shrink-0" />}
                 </button>
               ))}
-              {!nt.items.length && <div className="px-2.5 py-6 text-center text-ink-3 text-[13px]">Упоминаний пока нет</div>}
+              {!nt.items.length && <div className="px-2.5 py-6 text-center text-ink-3 text-[13px]">Уведомлений пока нет</div>}
             </> : <>
               {(activity || []).map((a) => (
                 <div key={a.id} className="flex gap-2.5 px-2.5 py-2 rounded-lg hover:bg-canvas">

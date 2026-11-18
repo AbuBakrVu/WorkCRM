@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Plus, Search, Filter, User, Table2, Kanban, X, MapPin, Clock, Play, MessageSquare, AlertTriangle, Ticket as TicketIcon, Send } from 'lucide-react';
+import { Plus, Search, Filter, User, Table2, Kanban, X, MapPin, Clock, Play, MessageSquare, AlertTriangle, Ticket as TicketIcon, Send, RotateCw, Check, MessageCircle } from 'lucide-react';
 import { useApp, useLoad, useNow, useStored } from '../lib/store';
 import { SavedViews } from '../components/SavedViews';
 import { HistoryPanel } from '../components/History';
 import { MessageText, useMentions } from '../components/Mentions';
 import { api } from '../lib/api';
-import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
+import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY, CHANNELS } from '../lib/constants';
 import { fmtDateTime, parseDate, timeAgo } from '../lib/format';
 import { Button, Segmented, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, userOptions, SearchList } from '../components/ui';
 import { ClientSelect } from '../components/ClientForm';
@@ -21,6 +21,12 @@ export function SlaBadge({ t, now }) {
   const human = (s) => (s >= 86400 ? `${Math.floor(s / 86400)} дн ${Math.floor((s % 86400) / 3600)} ч` : s >= 3600 ? `${Math.floor(s / 3600)} ч` : `${Math.max(1, Math.floor(s / 60))} мин`);
   if (left < 0) return <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-red-600 whitespace-nowrap"><AlertTriangle size={12} />просрочено {human(-left)}</span>;
   return <span className={cx('inline-flex items-center gap-1 text-[11.5px] whitespace-nowrap', left < 3600 * 2 ? 'text-amber-600 font-medium' : 'text-ink-3')}><Clock size={12} />{human(left)}</span>;
+}
+
+export function ChannelBadge({ channel, full }) {
+  const c = CHANNELS[channel];
+  if (!c) return null;
+  return <span className="inline-flex items-center h-[18px] px-1.5 rounded text-[10.5px] font-semibold tracking-wide" style={{ color: c.color, background: c.bg }} title={c.label}>{full ? c.label : c.short}</span>;
 }
 
 export default function Tickets() {
@@ -128,6 +134,7 @@ export default function Tickets() {
                       <td className="td">
                         <button onClick={() => setOpenId(t.id)} className="text-ink hover:text-violet text-left">{t.title}</button>
                         <div className="text-[11.5px] text-ink-3 flex items-center gap-2 mt-0.5">
+                          {t.channel && <ChannelBadge channel={t.channel} />}
                           {TICKET_CATEGORY[t.category]}{t.requester && <> · {t.requester}</>} · {timeAgo(t.created_at)}
                           {t.comments_count > 0 && <span className="inline-flex items-center gap-0.5"><MessageSquare size={11} />{t.comments_count}</span>}
                         </div>
@@ -266,6 +273,7 @@ function TicketDrawer({ id, onClose }) {
   const cRef = useRef(null);
   const mn = useMentions(users, comment, setComment, cRef);
   const [internal, setInternal] = useState(false);
+  const [toClient, setToClient] = useState(true);
   const now = useNow(30000);
   useEffect(() => { if (id) api.get(`/tickets/${id}`).then(setT).catch((e) => toast(e.message, 'error')); else setT(null); }, [id, version, toast]);
   if (!id) return null;
@@ -276,11 +284,16 @@ function TicketDrawer({ id, onClose }) {
   const send = async (e) => {
     e.preventDefault();
     if (!comment.trim()) return;
-    const c = await api.post(`/tickets/${id}/comments`, { body: comment, internal });
+    const viaChat = !!t.channel && toClient && !internal;
+    let c;
+    try { c = await api.post(`/tickets/${id}/comments`, { body: comment, internal, to_client: viaChat }); } catch (err) { toast(err.message, 'error'); return; }
     setT((x) => ({ ...x, comments: c })); setComment(''); mn.reset();
+    if (viaChat && c.at(-1)?.delivery === 'failed') toast(`Не доставлено в ${CHANNELS[t.channel].label}: ${c.at(-1).delivery_error || 'ошибка'}`, 'error');
     if (cRef.current) cRef.current.style.height = 'auto';
   };
   const remove = async () => { await api.del(`/tickets/${id}`); toast('Заявка удалена'); bump(); onClose(); };
+  const reload = () => api.get(`/tickets/${id}`).then(setT).catch((e) => toast(e.message, 'error'));
+  const resend = async (cid) => { try { await api.post(`/ticket-comments/${cid}/resend`); toast('Отправлено'); } catch (e) { toast(e.message, 'error'); } reload(); };
   return (
     <Drawer open={!!id} onClose={onClose} width={680} title={t ? `#${t.id} · ${t.title}` : 'Заявка'}
       actions={t && <Button size="sm" icon={Play} onClick={() => startTimer({ ticket_id: t.id, description: t.title })}>Таймер</Button>}>
@@ -311,7 +324,11 @@ function TicketDrawer({ id, onClose }) {
           <div className="flex items-start gap-3"><span className="text-[12.5px] text-ink-3 pt-0.5">Затрачено времени:</span><TimeLog total={t.tracked_sec} target={{ ticket_id: t.id, project_id: t.project_id || null }} /></div>
 
           <div>
-            <h3 className="text-[14px] font-semibold mb-2.5">Комментарии</h3>
+            <div className="flex items-center gap-2 mb-2.5">
+              <h3 className="text-[14px] font-semibold">{t.channel ? 'Переписка и комментарии' : 'Комментарии'}</h3>
+              {t.channel && <ChannelBadge channel={t.channel} full />}
+              {!t.channel && isManager && <StartWhatsApp ticket={t} onDone={reload} />}
+            </div>
             <div className="space-y-3">
               {t.comments.map((c) => (
                 <div key={c.id} className="flex gap-2.5">
@@ -320,6 +337,11 @@ function TicketDrawer({ id, onClose }) {
                     <div className="text-[12px]"><b className="font-medium">{c.user_name}</b>
                       {!!c.from_client && <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#0f7d84]">клиент</span>}
                       {!!c.internal && <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-amber-600">внутренний</span>}
+                      {c.channel && !c.internal && <span className="ml-1.5 align-middle"><ChannelBadge channel={c.channel} /></span>}
+                      {c.delivery === 'sent' && !c.inbound && <span className="ml-1 text-emerald-600 inline-flex align-middle" title="Доставлено клиенту"><Check size={12} /></span>}
+                      {c.delivery === 'pending' && <span className="ml-1.5 text-[11px] text-ink-3">отправляется…</span>}
+                      {c.delivery === 'failed' && <span className="ml-1.5 text-[11px] text-red-600" title={c.delivery_error || ''}>не доставлено
+                        <button type="button" onClick={() => resend(c.id)} className="ml-1 inline-flex items-center gap-0.5 underline"><RotateCw size={11} />повторить</button></span>}
                       {' '}<span className="text-ink-3">{timeAgo(c.created_at)}</span></div>
                     <div className="text-[13px] text-ink-2 mt-0.5 whitespace-pre-wrap"><MessageText text={c.body} users={users} /></div>
                   </div>
@@ -330,16 +352,37 @@ function TicketDrawer({ id, onClose }) {
               {mn.popup('absolute bottom-full left-0 mb-2')}
               <textarea ref={cRef} rows={1} className="input resize-none py-2 leading-5" value={comment} onChange={mn.onChange} onBlur={mn.closeSoon}
                 onKeyDown={(e) => { if (mn.onKeyDown(e)) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }}
-                placeholder={internal ? 'Внутренний комментарий — клиент его не увидит' : 'Комментарий… @ — упомянуть коллегу'} />
-              <Button variant="dark" icon={Send} type="submit">Отправить</Button>
+                placeholder={internal ? 'Внутренний комментарий — клиент его не увидит' : t.channel && toClient ? `Ответ клиенту в ${CHANNELS[t.channel].label}…` : 'Комментарий… @ — упомянуть коллегу'} />
+              <Button variant="dark" icon={Send} type="submit">{t.channel && toClient && !internal ? 'Клиенту' : 'Отправить'}</Button>
             </form>
-            {t.client_id && <label className="flex items-center gap-2 mt-2 text-[12px] text-ink-2"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} className="accent-[var(--color-brand)]" />
-              Внутренний комментарий (не виден клиенту в личном кабинете)</label>}
+            {t.channel && !internal && <label className="flex items-center gap-2 mt-2 text-[12px] text-ink-2"><input type="checkbox" checked={toClient} onChange={(e) => setToClient(e.target.checked)} className="accent-[var(--color-brand)]" />
+              Отправить клиенту в {CHANNELS[t.channel].label}{!toClient && ' (сейчас — только комментарий в CRM)'}</label>}
+            {(t.client_id || t.channel) && <label className="flex items-center gap-2 mt-2 text-[12px] text-ink-2"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} className="accent-[var(--color-brand)]" />
+              Внутренний комментарий (не виден клиенту и не уходит в мессенджер)</label>}
           </div>
           <HistoryPanel entity="ticket" id={t.id} />
           {isManager && <div className="pt-2 border-t border-line"><ConfirmButton onConfirm={remove}>Удалить заявку</ConfirmButton></div>}
         </div>
       )}
     </Drawer>
+  );
+}
+
+// Начать переписку в WhatsApp по заявке, созданной вручную
+function StartWhatsApp({ ticket, onDone }) {
+  const { toast } = useApp();
+  const [phone, setPhone] = useState('');
+  const start = async (close) => {
+    try { await api.post(`/tickets/${ticket.id}/chat`, { phone }); toast('Теперь ответы можно отправлять в WhatsApp'); close(); onDone(); } catch (e) { toast(e.message, 'error'); }
+  };
+  return (
+    <Popover align="right" width={280} trigger={({ toggle }) => <button type="button" onClick={() => { setPhone((ticket.requester_contact || '').match(/[+\d][\d\s()-]{9,}/)?.[0] || ''); toggle(); }} className="ml-auto inline-flex items-center gap-1 text-[12px] text-violet font-medium"><MessageCircle size={13} />Написать в WhatsApp</button>}>
+      {({ close }) => (
+        <div className="p-2.5 space-y-2">
+          <Field label="Номер клиента"><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 928 123-45-67" autoFocus /></Field>
+          <Button variant="primary" size="sm" className="w-full" onClick={() => start(close)}>Привязать WhatsApp</Button>
+        </div>
+      )}
+    </Popover>
   );
 }

@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { api, runRecurrences, runInvoiceSchedules, purgeNotifications } from './routes.js';
+import { api, runRecurrences, runInvoiceSchedules, purgeNotifications, startMessengers, runSlaAlerts } from './routes.js';
 import { trashAutoPurge } from './audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,12 +35,16 @@ if (fs.existsSync(PUBLIC_DIR)) {
 
 app.listen(PORT, () => console.log(`CRM запущена на http://localhost:${PORT}`));
 
+// Telegram и WhatsApp: опрос входящих сообщений
+startMessengers();
+
 // Повторяющиеся задачи и счета: проверка при старте и каждые 10 минут
 const tick = () => {
   try { runRecurrences(); } catch (e) { console.error(e); }
   try { runInvoiceSchedules(); } catch (e) { console.error(e); }
   try { trashAutoPurge(30); } catch (e) { console.error(e); }
   try { purgeNotifications(); } catch (e) { console.error(e); }
+  try { runSlaAlerts(); } catch (e) { console.error(e); }
 };
 tick();
 setInterval(tick, 10 * 60 * 1000);

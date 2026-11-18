@@ -1,14 +1,16 @@
-import { all, get, logActivity } from '../db.js';
+import { all, get, run, logActivity } from '../db.js';
 import { trashDelete } from '../audit.js';
 import { requireRole } from '../auth.js';
-import { api, bad, notFound, wrap, pick, insert, update, idParam, required, nowIso } from './shared.js';
+import { api, bad, notFound, wrap, wrapAsync, pick, insert, update, idParam, required, nowIso } from './shared.js';
 import { notifyMentions } from './tasks.js';
+import { replyToTicketChat, notifyTicketAssigned, onTicketResolved } from './messengers.js';
 
 /* ---------- tickets (заявки) ---------- */
 const TICKET_FIELDS = ['title', 'description', 'category', 'priority', 'status', 'location', 'requester', 'requester_contact',
   'client_id', 'project_id', 'assignee_id', 'due_at', 'resolution', 'asset_id'];
 export const TICKET_SELECT = `SELECT k.*, u.name assignee_name, u.color assignee_color, c.name client_name, p.name project_name,
     (SELECT name FROM assets a WHERE a.id = k.asset_id) asset_name,
+    (SELECT channel FROM messenger_chats mc WHERE mc.id = k.messenger_chat_id) channel,
     (SELECT COUNT(*) FROM ticket_comments m WHERE m.ticket_id = k.id) comments_count,
     (SELECT COALESCE(SUM(duration_sec),0) FROM time_entries e WHERE e.ticket_id = k.id) tracked_sec
   FROM tickets k LEFT JOIN users u ON u.id = k.assignee_id LEFT JOIN clients c ON c.id = k.client_id LEFT JOIN projects p ON p.id = k.project_id`;
@@ -35,6 +37,7 @@ api.post('/tickets', wrap((req) => {
   data.created_by = req.user.id;
   const id = insert('tickets', data);
   logActivity(req.user.id, 'ticket', id, 'create', `создал заявку #${id} «${data.title}»`);
+  notifyTicketAssigned(id, data.assignee_id, req.user.id);
   return get(`${TICKET_SELECT} WHERE k.id = ?`, id);
 }));
 
@@ -49,22 +52,30 @@ api.put('/tickets/:id', wrap((req) => {
     logActivity(req.user.id, 'ticket', id, 'status', `изменил статус заявки #${id} → ${data.status}`);
   }
   update('tickets', id, data);
+  if (data.assignee_id && data.assignee_id !== before.assignee_id) notifyTicketAssigned(id, data.assignee_id, req.user.id);
+  if (data.status === 'resolved' && before.status !== 'resolved' && !before.resolved_at) onTicketResolved(id);
+  // клиент, указанный в заявке из мессенджера, запоминается за чатом — следующие заявки сразу получат его
+  if (data.client_id && before.messenger_chat_id) run('UPDATE messenger_chats SET client_id = ? WHERE id = ?', data.client_id, before.messenger_chat_id);
   return get(`${TICKET_SELECT} WHERE k.id = ?`, id);
 }));
 
 // Комментарии заявки: сотрудники и клиенты (из личного кабинета); internal — не видны клиенту
 export function ticketComments(id, forPortal = false) {
   return all(`SELECT m.id, m.ticket_id, m.body, m.created_at, m.internal, m.user_id, m.portal_user_id,
-      COALESCE(u.name, pu.name) user_name, u.color user_color, m.portal_user_id IS NOT NULL from_client
+      m.channel, m.inbound, m.delivery, ${forPortal ? 'NULL' : 'm.delivery_error'} delivery_error,
+      COALESCE(u.name, pu.name, m.sender_name) user_name, u.color user_color, (m.portal_user_id IS NOT NULL OR m.inbound = 1) from_client
     FROM ticket_comments m LEFT JOIN users u ON u.id = m.user_id LEFT JOIN portal_users pu ON pu.id = m.portal_user_id
     WHERE m.ticket_id = ? ${forPortal ? 'AND m.internal = 0' : ''} ORDER BY m.created_at, m.id`, id);
 }
-api.post('/tickets/:id/comments', wrap((req) => {
+// to_client: true — ответ уходит клиенту в Telegram/WhatsApp (если заявка пришла из мессенджера)
+api.post('/tickets/:id/comments', wrapAsync(async (req) => {
   const id = idParam(req);
-  if (!get('SELECT 1 FROM tickets WHERE id = ?', id)) throw notFound();
+  const t = get('SELECT * FROM tickets WHERE id = ?', id);
+  if (!t) throw notFound();
   const body = String(req.body?.body || '').trim().slice(0, 5000);
   if (!body) throw bad('Пустой комментарий');
-  insert('ticket_comments', { ticket_id: id, user_id: req.user.id, body, internal: req.body?.internal ? 1 : 0 });
+  if (req.body?.to_client && !req.body?.internal) await replyToTicketChat(t, body, req.user.id);
+  else insert('ticket_comments', { ticket_id: id, user_id: req.user.id, body, internal: req.body?.internal ? 1 : 0 });
   notifyMentions({ text: body, entity: 'ticket', entityId: id, authorId: req.user.id });
   return ticketComments(id);
 }));

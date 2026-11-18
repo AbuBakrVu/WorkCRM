@@ -16,6 +16,8 @@ export const wrap = (fn) => (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+export const wrapAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).then((d) => res.json(d)).catch(next);
+
 // Берём из тела только разрешённые поля; '' → null, boolean → 0/1
 export function pick(body, fields) {
   const out = {};

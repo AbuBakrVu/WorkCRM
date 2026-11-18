@@ -81,3 +81,9 @@ export const INVOICE_STATUS = {
   paid: { label: 'Оплачен', color: 'var(--color-st-done)' },
   cancelled: { label: 'Отменён', color: 'var(--color-st-planned)' },
 };
+
+// Мессенджеры (заявки из Telegram / WhatsApp)
+export const CHANNELS = {
+  telegram: { label: 'Telegram', short: 'TG', color: '#229ED9', bg: '#e6f4fb' },
+  whatsapp: { label: 'WhatsApp', short: 'WA', color: '#1da851', bg: '#e6f7ec' },
+};

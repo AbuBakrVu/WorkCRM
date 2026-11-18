@@ -57,7 +57,7 @@ api.use((req, res, next) => {
 api.get('/auth/me', wrap((req) => req.user));
 
 api.put('/auth/me', wrap((req) => {
-  const data = pick(req.body, ['name', 'phone', 'position', 'color']);
+  const data = pick(req.body, ['name', 'phone', 'position', 'color', 'tg_notify']);
   if (req.body?.new_password) {
     const u = get('SELECT * FROM users WHERE id = ?', req.user.id);
     if (!checkPassword(String(req.body.current_password || ''), u.password_hash)) throw bad('Текущий пароль неверен');

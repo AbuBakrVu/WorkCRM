@@ -65,7 +65,7 @@ api.delete('/companies/:id/image/:kind', requireRole('admin', 'manager'), wrap((
 
 /* ---------- настройки приложения (интеграции) ---------- */
 export const getSetting = (k) => get('SELECT value FROM app_settings WHERE key = ?', k)?.value ?? null;
-const setSetting = (k, v) => run('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', k, v);
+export const setSetting = (k, v) => run('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', k, v);
 const SECRET_KEYS = ['dadata_key'];
 api.get('/app-settings', requireRole('admin'), wrap(() => {
   const out = {};
@@ -93,7 +93,8 @@ async function dadata(method, query) {
   if (!r.ok) throw bad(`Ошибка DaData (${r.status})`);
   return (await r.json()).suggestions?.[0]?.data || null;
 }
-export const wrapAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).then((d) => res.json(d)).catch(next);
+import { wrapAsync } from './shared.js';
+export { wrapAsync };
 api.get('/lookup/party', wrapAsync(async (req) => {
   const inn = String(req.query.inn || '').replace(/\D/g, '');
   if (![10, 12].includes(inn.length)) throw bad('ИНН — 10 цифр для организации или 12 для ИП');

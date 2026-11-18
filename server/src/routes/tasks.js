@@ -7,6 +7,7 @@ import { nextDate, addDays, todayMsk } from '../recurrence.js';
 import { trashDelete } from '../audit.js';
 import { api, HttpError, bad, notFound, wrap, pick, insert, update, idParam, required, nowIso } from './shared.js';
 import { stopRunning, timerState } from './time.js';
+import { pushMention, notifyTaskAssigned } from './messengers.js';
 
 /* ---------- tasks ---------- */
 const TASK_FIELDS = ['project_id', 'title', 'description', 'status', 'assignee_id', 'start_date', 'due_date', 'report_date', 'position', 'parent_id'];
@@ -121,6 +122,7 @@ api.post('/tasks', wrap((req) => {
   });
   const pname = get('SELECT name FROM projects WHERE id = ?', data.project_id)?.name;
   logActivity(req.user.id, 'task', id, 'create', `добавил задачу «${data.title}»${pname ? ` в ${pname}` : ''}`);
+  notifyTaskAssigned(id, data.assignee_id, req.user.id);
   return getTask(id);
 }));
 api.put('/tasks/:id', wrap((req) => {
@@ -163,6 +165,7 @@ api.put('/tasks/:id', wrap((req) => {
     setTaskMembers(id, 'coassignee', req.body.coassignee_ids, req.user.id);
     setTaskMembers(id, 'observer', req.body.observer_ids, req.user.id);
   });
+  if (changed.includes('assignee_id')) notifyTaskAssigned(id, data.assignee_id, req.user.id);
   return taskDetails(getTask(id));
 }));
 api.delete('/tasks/:id', wrap((req) => {
@@ -382,6 +385,7 @@ export function notifyMentions({ text, entity, entityId, authorId }) {
   for (const u of mentionedUsers(text)) {
     if (u.id === authorId) continue;
     insert('notifications', { user_id: u.id, kind: 'mention', entity, entity_id: entityId, from_user_id: authorId, text: String(text).slice(0, 200) });
+    pushMention({ userId: u.id, authorId, entity, entityId, text });
   }
 }
 
