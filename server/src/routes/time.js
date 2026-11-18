@@ -40,6 +40,8 @@ api.get('/time', wrap((req) => {
   if (to) { where.push('e.started_at < ?'); params.push(to); }
   if (req.query.user_id) { where.push('e.user_id = ?'); params.push(Number(req.query.user_id)); }
   if (req.query.project_id) { where.push('e.project_id = ?'); params.push(Number(req.query.project_id)); }
+  if (req.query.task_id) { where.push('e.task_id = ?'); params.push(Number(req.query.task_id)); }
+  if (req.query.ticket_id) { where.push('e.ticket_id = ?'); params.push(Number(req.query.ticket_id)); }
   return all(`${TIME_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY e.started_at DESC LIMIT 1000`, ...params);
 }));
 

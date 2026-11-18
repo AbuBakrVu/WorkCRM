@@ -8,11 +8,12 @@ import { taskPerms } from '../lib/perms';
 import { MessageText, useMentions } from './Mentions';
 import { api, fileUrl, fmtSize } from '../lib/api';
 import { TASK_STATUS } from '../lib/constants';
-import { fmtDate, fmtDateTime, fmtHM, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
+import { fmtDate, fmtDateTime, fmtHMS, fmtTime, todayStr, toDateStr, parseDate, plural } from '../lib/format';
 import { ChecklistBlock, SubtasksBlock, DepsBlock } from './TaskExtras';
 import { RecurrenceFields, recurrenceBody, ruleText } from './Recurrence';
 import { Modal, Drawer, Field, Select, Button, IconButton, ConfirmButton, HoursDeleteDialog, Spinner, Avatar, AvatarStack, UserPicker, Popover, MenuItem, Pill, Odometer, cx, userOptions, SearchList } from './ui';
 import { HistoryPanel } from './History';
+import { TimeLog } from './TimeLog';
 import { ProjectSelect } from './ProjectForm';
 
 const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
@@ -370,7 +371,7 @@ export function TaskDrawer({ id: rootId, onClose }) {
                 </Row>
                 <Row label="Создана"><span className="text-[13px] text-ink">{fmtDateTime(t.created_at)}</span></Row>
                 {t.completed_at && <Row label="Закрыта"><span className="text-[13px] text-ink">{fmtDateTime(t.completed_at)}</span></Row>}
-                <Row label="Затрачено"><span className="inline-flex items-center gap-1.5 text-[13px] text-ink tabular"><Clock size={14} className="text-ink-3" />{fmtHM(t.tracked_sec)} ч</span></Row>
+                <Row label="Затрачено"><TimeLog total={t.tracked_sec} target={{ task_id: t.id, project_id: t.project_id }} /></Row>
               </Section>
 
               <Section title={`Файлы${t.files_count ? ` · ${t.files_count}` : ''}`} icon={Paperclip}

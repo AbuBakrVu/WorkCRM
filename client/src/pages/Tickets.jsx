@@ -7,10 +7,11 @@ import { HistoryPanel } from '../components/History';
 import { MessageText, useMentions } from '../components/Mentions';
 import { api } from '../lib/api';
 import { TICKET_STATUS, TICKET_PRIORITY, TICKET_CATEGORY } from '../lib/constants';
-import { fmtDateTime, fmtHM, parseDate, timeAgo } from '../lib/format';
+import { fmtDateTime, parseDate, timeAgo } from '../lib/format';
 import { Button, Segmented, Popover, MenuItem, StatusDot, Pill, Avatar, Card, Empty, Spinner, Drawer, Modal, Field, Select, ConfirmButton, PageHeader, cx, userOptions, SearchList } from '../components/ui';
 import { ClientSelect } from '../components/ClientForm';
 import { ProjectSelect } from '../components/ProjectForm';
+import { TimeLog } from '../components/TimeLog';
 
 const OPEN = ['new', 'in_progress', 'waiting'];
 
@@ -307,7 +308,7 @@ function TicketDrawer({ id, onClose }) {
           {['resolved', 'closed'].includes(t.status) && (
             <Field label="Решение"><textarea className="input" rows={2} defaultValue={t.resolution || ''} placeholder="Что было сделано" onBlur={(e) => patch({ resolution: e.target.value })} /></Field>
           )}
-          <div className="text-[12.5px] text-ink-3">Затрачено времени: <b className="text-ink tabular">{fmtHM(t.tracked_sec)} ч</b></div>
+          <div className="flex items-start gap-3"><span className="text-[12.5px] text-ink-3 pt-0.5">Затрачено времени:</span><TimeLog total={t.tracked_sec} target={{ ticket_id: t.id, project_id: t.project_id || null }} /></div>
 
           <div>
             <h3 className="text-[14px] font-semibold mb-2.5">Комментарии</h3>
