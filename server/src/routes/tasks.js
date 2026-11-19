@@ -139,7 +139,11 @@ api.put('/tasks/:id', wrap((req) => {
   // Изменились ли «содержательные» поля (всё, кроме статуса)?
   const changed = Object.keys(data).filter((k) => (data[k] ?? null) !== (before[k] ?? null));
   const membersChange = Array.isArray(req.body.coassignee_ids) || Array.isArray(req.body.observer_ids);
-  if (changed.length || membersChange) {
+  // «Дату в отчёте» можно менять и у закрытой задачи (перенос в отчёт другого месяца) — постановщику, менеджеру, администратору
+  const onlyReport = changed.length === 1 && changed[0] === 'report_date' && !membersChange;
+  if (onlyReport) {
+    if (!perms.edit && req.user.role !== 'manager') throw new HttpError(403, 'Менять дату в отчёте может постановщик, менеджер или администратор');
+  } else if (changed.length || membersChange) {
     if (!perms.edit) throw new HttpError(403, 'Менять задачу может только постановщик или администратор');
     if (before.status === 'done') throw new HttpError(403, 'Задача закрыта. Чтобы изменить её, сначала возобновите');
   }
@@ -156,6 +160,9 @@ api.put('/tasks/:id', wrap((req) => {
     }
     if (changed.includes('assignee_id')) {
       systemComment(id, req.user.id, data.assignee_id ? `назначил исполнителя: ${userName(data.assignee_id)}` : 'снял исполнителя');
+    }
+    if (changed.includes('report_date')) {
+      systemComment(id, req.user.id, data.report_date ? `указал дату в отчёте: ${data.report_date.split('-').reverse().join('.')}` : 'убрал дату в отчёте');
     }
     if (changed.includes('due_date')) {
       systemComment(id, req.user.id, data.due_date ? `изменил крайний срок: ${data.due_date.split('-').reverse().join('.')}` : 'убрал крайний срок');

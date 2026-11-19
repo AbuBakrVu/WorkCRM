@@ -4,5 +4,7 @@ export function taskPerms(user, t) {
   const admin = user.role === 'admin';
   const owner = t.created_by ? t.created_by === user.id : user.role === 'manager';
   const doer = t.assignee_id === user.id || (t.coassignee_ids || []).includes(user.id);
-  return { edit: (admin || owner) && t.status !== 'done', del: admin || owner, status: admin || owner || doer };
+  return { edit: (admin || owner) && t.status !== 'done', del: admin || owner, status: admin || owner || doer,
+    // «Дата в отчёте» — и у закрытых задач
+    report: admin || owner || user.role === 'manager' };
 }

@@ -371,10 +371,10 @@ export function TaskDrawer({ id: rootId, onClose }) {
                 </Row>
                 <Row label="Дата в отчёте">
                   <div className="flex flex-wrap items-center gap-2">
-                    {perms.edit ? (
+                    {perms.report ? (
                       <DueDateInput value={t.report_date} onSave={(v) => patch({ report_date: v })} className="input !h-8 !w-auto !rounded-full" />
                     ) : <span className="text-[13px] text-ink">{t.report_date ? fmtDate(t.report_date, true) : '—'}</span>}
-                    {!t.report_date && <span className="text-[12px] text-ink-3">не указана — в отчёте даты работ</span>}
+                    <span className="text-[12px] text-ink-3">{t.report_date ? 'задача и её часы — в отчёте и абонентке за этот месяц' : 'не указана — по датам работ и закрытия'}</span>
                   </div>
                 </Row>
                 <Row label="Создана"><span className="text-[13px] text-ink">{fmtDateTime(t.created_at)}</span></Row>

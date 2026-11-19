@@ -86,7 +86,8 @@ export function buildClientReport(query, forPortal = false) {
     || get('SELECT * FROM companies ORDER BY is_default DESC, id LIMIT 1') || null;
   const match = `((? IS NOT NULL AND (e.project_id = ? OR t.project_id = ?)) OR (? IS NOT NULL AND (p.client_id = ? OR t.client_id = ? OR e.client_id = ?)))`;
   const margs = [projectId, projectId, projectId, clientId, clientId, clientId, clientId];
-  // Время, сгруппированное по задаче / заявке
+  // Время, сгруппированное по задаче / заявке.
+  // Если у задачи указана «Дата в отчёте» — задача и все её часы относятся к этой дате (можно перенести в прошлый месяц)
   // Удалённые задачи/заявки группируем по сохранённому названию
   const work = all(`SELECT e.task_id, e.ticket_id, COALESCE(tk.title, e.task_title) task_title, tk.status task_status,
       COALESCE(t.title, e.ticket_title) ticket_title, t.status ticket_status,
@@ -95,7 +96,7 @@ export function buildClientReport(query, forPortal = false) {
       GROUP_CONCAT(e.id || '\u0002' || e.hide_note || '\u0002' || COALESCE(e.description, ''), '\u0001') items
     FROM time_entries e JOIN users u ON u.id = e.user_id LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id
     LEFT JOIN tasks tk ON tk.id = e.task_id
-    WHERE e.ended_at IS NOT NULL AND ${MSK('e.started_at')} BETWEEN ? AND ? AND ${match}
+    WHERE e.ended_at IS NOT NULL AND COALESCE(tk.report_date, ${MSK('e.started_at')}) BETWEEN ? AND ? AND ${match}
     GROUP BY e.task_id, e.ticket_id, CASE WHEN e.task_id IS NULL THEN e.task_title END, CASE WHEN e.ticket_id IS NULL THEN e.ticket_title END
     ORDER BY last_day DESC`, from, to, ...margs)
     .map(({ items, ...w }) => {
@@ -119,7 +120,7 @@ export function buildClientReport(query, forPortal = false) {
   const closed = all(`SELECT tk.id, tk.title, tk.completed_at, tk.report_date,
       (SELECT c.body FROM task_comments c WHERE c.task_id = tk.id AND c.report = 'close' ORDER BY c.id DESC LIMIT 1) result
     FROM tasks tk JOIN projects p ON p.id = tk.project_id
-    WHERE tk.status = 'done' AND ${MSK('tk.completed_at')} BETWEEN ? AND ? AND ((? IS NOT NULL AND tk.project_id = ?) OR (? IS NOT NULL AND p.client_id = ?))
+    WHERE tk.status = 'done' AND COALESCE(tk.report_date, ${MSK('tk.completed_at')}) BETWEEN ? AND ? AND ((? IS NOT NULL AND tk.project_id = ?) OR (? IS NOT NULL AND p.client_id = ?))
     ORDER BY tk.completed_at`, from, to, projectId, projectId, clientId, clientId);
   const tickets = all(`SELECT t.id, t.title, t.resolved_at, t.resolution FROM tickets t
     WHERE t.resolved_at IS NOT NULL AND ${MSK('t.resolved_at')} BETWEEN ? AND ? AND ((? IS NOT NULL AND t.project_id = ?) OR (? IS NOT NULL AND t.client_id = ?))
